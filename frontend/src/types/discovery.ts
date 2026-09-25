@@ -1,0 +1,10 @@
+export type DiscoveryCategory =
+  | 'all'
+  | 'design'
+  | 'templates'
+  | 'photography'
+  | 'illustration'
+  | 'fonts'
+  | 'three-d'
+  | 'audio'
+  | 'publications'

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="dev.meteor.product.mapper.ProductMapper">
+
+    <select id="findPublishedProducts" resultType="dev.meteor.product.mapper.projection.ProductSummaryProjection">
+        SELECT p.id,
+               s.name AS shop_name,
+               p.title,
+               p.summary
+        FROM products p
+        JOIN shops s ON s.id = p.shop_id
+        WHERE p.status = 'PUBLISHED'
+          AND (
+              #{categorySlug} IS NULL
+              OR EXISTS (
+                  SELECT 1
+                  FROM product_categories pc
+                  WHERE pc.product_id = p.id
+                    AND pc.category_slug = #{categorySlug}
+              )
+          )
+          AND (
+              p.title LIKE #{searchPattern} ESCAPE '!'
+              OR p.summary LIKE #{searchPattern} ESCAPE '!'
+              OR s.name LIKE #{searchPattern} ESCAPE '!'
+          )
+        ORDER BY p.created_at DESC, p.id DESC
+        LIMIT 24
+    </select>
+
+    <select id="findPublishedProduct" resultType="dev.meteor.product.mapper.projection.ProductSummaryProjection">
+        SELECT p.id,
+               s.name AS shop_name,
+               p.title,
+               p.summary
+        FROM products p
+        JOIN shops s ON s.id = p.shop_id
+        WHERE p.id = #{productId}
+          AND p.status = 'PUBLISHED'
+    </select>
+
+    <select id="findSalePackages" resultType="dev.meteor.product.mapper.projection.PackageOptionProjection">
+        SELECT id,
+               name,
+               price_cents,
+               currency
+        FROM packages
+        WHERE product_id = #{productId}
+          AND sale_status = 'ON_SALE'
+        ORDER BY display_order, id
+    </select>
+</mapper>

@@ -1,0 +1,11 @@
+.idea/
+.design-checkpoints/
+**/node_modules/
+**/dist/
+**/target/
+*.iml
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+*.log
