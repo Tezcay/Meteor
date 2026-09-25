@@ -8,6 +8,7 @@ import { getLocalPurchase, saveLocalPurchase, saveLocalRole } from '../data/loca
 import type { LocalRole } from '../data/localStore'
 import {
   artworkCollections,
+  illustrationTopics,
   collectionSlugFor,
   getArtworkCollection,
   seededProduct,
@@ -22,6 +23,7 @@ const route = useRoute()
 const router = useRouter()
 const category = ref<DiscoveryCategory>(parseCategory(String(route.query.category ?? '')))
 const query = ref(String(route.query.q ?? ''))
+const topic = ref(String(route.query.topic ?? ''))
 const selectedPackage = ref(Number(route.query.package ?? 2001))
 const resultState = ref<'waiting' | 'checking' | 'ready' | 'late'>('waiting')
 const showLibraryPreview = ref(false)
@@ -69,6 +71,7 @@ const packageOption = computed(
     displayProduct.value.packages[0]!,
 )
 const isDemoProduct = computed(() => !product.value)
+const featuredIllustrationTopics = computed(() => category.value === 'illustration' ? illustrationTopics : [])
 const featuredCollections = computed(() =>
   artworkCollections.filter(
     (item) => category.value === 'all' || item.category === category.value,
@@ -78,6 +81,7 @@ const catalogWorks = computed(() => {
   const keyword = query.value.trim().toLocaleLowerCase()
   const items = showcaseItems.filter((work) => {
     if (category.value !== 'all' && work.category !== category.value) return false
+    if (topic.value && work.topic !== topic.value) return false
     if (!keyword) return true
     return [work.title, work.maker, work.description, work.tags.join(' ')]
       .join(' ')
@@ -138,7 +142,7 @@ async function loadCatalog() {
   }
 }
 
-watch([query, category], () => {
+watch([query, category, topic], () => {
   if (props.path !== '/discover') return
   if (searchTimer) clearTimeout(searchTimer)
   catalogRequest?.abort()
@@ -165,7 +169,12 @@ function setCategory(value: DiscoveryCategory) {
   const nextQuery = { ...route.query }
   if (value === 'all') delete nextQuery.category
   else nextQuery.category = value
+  if (value !== 'illustration') delete nextQuery.topic
   void router.replace({ path: '/discover', query: nextQuery })
+}
+function setIllustrationTopic(slug: string) {
+  topic.value = slug
+  void router.replace({ path: '/discover', query: { ...route.query, category: 'illustration', topic: slug } })
 }
 
 watch(
@@ -173,6 +182,7 @@ watch(
   () => {
     category.value = parseCategory(String(route.query.category ?? ''))
     query.value = String(route.query.q ?? '')
+    topic.value = String(route.query.topic ?? '')
     selectedPackage.value = Number(route.query.package ?? 2001)
     activeImageIndex.value = 0
     collectionSaved.value = false
@@ -250,17 +260,38 @@ function signInWithDemoRole() {
           </button>
         </nav>
         <section
-          v-if="!query.trim() && featuredCollections.length"
+          v-if="!query.trim() && (featuredIllustrationTopics.length || featuredCollections.length)"
           class="collection-index"
           aria-labelledby="collection-index-title"
         >
           <div class="collection-index-heading">
             <div>
-              <h1 id="collection-index-title">专题</h1>
-              <p>从一组完整的作品开始浏览</p>
+              <h1 id="collection-index-title">{{ category === 'illustration' ? '插画脉络' : '专题' }}</h1>
+              <p>{{ category === 'illustration' ? '从一个主题进入，再浏览全部作品' : '从一组完整的作品开始浏览' }}</p>
             </div>
           </div>
-          <div class="collection-index-grid">
+          <div v-if="category === 'illustration'" class="illustration-topic-grid" aria-label="插画主题">
+            <button
+              v-for="item in featuredIllustrationTopics"
+              :key="item.slug"
+              class="illustration-topic-card"
+              :class="{ 'is-active': topic === item.slug }"
+              type="button"
+              :aria-pressed="topic === item.slug"
+              @click="setIllustrationTopic(item.slug)"
+            >
+              <div class="illustration-topic-image">
+                <img :src="item.cover.src" :alt="item.cover.alt" loading="lazy" />
+                <span>{{ item.count }} 件</span>
+              </div>
+              <div class="illustration-topic-copy">
+                <h2>{{ item.title }}</h2>
+                <p>{{ item.description }}</p>
+                <span>浏览此主题 <i aria-hidden="true">→</i></span>
+              </div>
+            </button>
+          </div>
+          <div v-else class="collection-index-grid">
             <a
               v-for="item in featuredCollections"
               :key="item.slug"

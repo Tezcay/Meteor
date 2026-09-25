@@ -14,6 +14,8 @@ export interface ShowcaseItem {
   tags: string[]
   /** Explicit editorial relationship; never inferred from category or visual similarity. */
   collectionSlug?: string
+  /** Platform-curated browse grouping; separate from a creator/editorial series. */
+  topic?: string
 }
 
 export interface ArtworkCollection {
@@ -154,6 +156,14 @@ const posterTags: Record<string, string[]> = {
   雪地木屋: ['冬日', '木屋', '雪景'],
   山野秋色: ['秋日', '山野', '金色'],
 }
+const posterTopics: Record<string, string> = {
+  冬日松林: 'winter-stillness',
+  雪山湖畔: 'winter-stillness',
+  雪地木屋: 'winter-stillness',
+  静谧建筑: 'quiet-architecture',
+  暮色原野: 'landscape-narrative',
+  山野秋色: 'landscape-narrative',
+}
 const posterItems: ShowcaseItem[] = posterImages.map(([title, image, description], variant) => ({
   title,
   category: 'illustration',
@@ -164,8 +174,9 @@ const posterItems: ShowcaseItem[] = posterImages.map(([title, image, description
   mark: `POSTER ${String(variant + 1).padStart(2, '0')}`,
   variant,
   featured: variant < 2,
-  subcategory: 'landscape',
+  subcategory: posterTopics[title] ?? 'landscape',
   tags: ['风景', '纸本质感', ...(posterTags[title] ?? [])],
+  topic: posterTopics[title],
   // Only the declared winter trio is an editorial sequence; visual similarity is not enough.
   collectionSlug: winterPosterTitles.has(title) ? 'winter-stillness' : undefined,
 }))
@@ -173,6 +184,41 @@ const posterItems: ShowcaseItem[] = posterImages.map(([title, image, description
 // Editorial demonstrations are browsing material, not purchasable product records.
 export const showcaseItems: ShowcaseItem[] = [...demoItems, ...photographyItems, ...posterItems]
 
+export interface ArtworkTopic {
+  slug: string
+  title: string
+  description: string
+  category: 'illustration'
+  cover: { src: string; alt: string }
+  count: number
+}
+
+export const illustrationTopics: ArtworkTopic[] = [
+  {
+    slug: 'winter-stillness',
+    title: '冬日静谧',
+    description: '松林、雪线与微暖天光',
+    category: 'illustration',
+    cover: { src: '/images/posters/winter-forest.webp', alt: '冬日松林插画' },
+    count: 3,
+  },
+  {
+    slug: 'quiet-architecture',
+    title: '静谧建筑',
+    description: '几何体、蓝天与克制的光',
+    category: 'illustration',
+    cover: { src: '/images/posters/still-places.webp', alt: '静谧建筑插画' },
+    count: 1,
+  },
+  {
+    slug: 'landscape-narrative',
+    title: '风景叙事',
+    description: '原野、山色与人物的停留',
+    category: 'illustration',
+    cover: { src: '/images/posters/sunset-field.webp', alt: '暮色原野插画' },
+    count: 2,
+  },
+]
 export const artworkCollections: ArtworkCollection[] = [
   {
     slug: 'light-and-space',
@@ -191,8 +237,10 @@ export const artworkCollections: ArtworkCollection[] = [
     title: '冬日静谧',
     maker: '编辑精选',
     category: 'illustration',
-    summary: '六张以松林、雪线与黄昏光线组成的插画序列',
-    images: posterImages.map(([title, src, alt]) => ({ src, alt: `${title}：${alt}` })),
+    summary: '三张以松林、雪线与微暖天光组成的冬日插画序列',
+    images: posterImages
+      .filter(([title]) => winterPosterTitles.has(title))
+      .map(([title, src, alt]) => ({ src, alt: `${title}：${alt}` })),
   },
 ]
 
