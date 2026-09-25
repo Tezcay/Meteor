@@ -54,6 +54,11 @@ const activeCollectionImage = computed(() => collection.value?.images[activeImag
 const collectionCategoryLabel = computed(() =>
   collection.value?.category === 'photography' ? '摄影' : '插画',
 )
+const relatedTopics = computed(() =>
+  collection.value?.category === 'illustration'
+    ? illustrationTopics.filter((item) => item.slug !== collection.value?.slug)
+    : [],
+)
 const requestedProductId = computed(() =>
   isProductPath.value
     ? Number(props.path.slice('/products/'.length))
@@ -464,8 +469,14 @@ function signInWithDemoRole() {
         </div>
       </section>
       <section class="page-width collection-continue" aria-labelledby="collection-continue-title">
-        <h2 id="collection-continue-title">继续浏览</h2>
-        <a class="underlined-link" :href="`/discover?category=${collection.category}`">更多{{ collectionCategoryLabel }}作品</a>
+        <div>
+          <h2 id="collection-continue-title">继续浏览</h2>
+          <p>换一个主题，继续看完整图集。</p>
+        </div>
+        <nav class="collection-continue-links" aria-label="相关主题">
+          <a v-for="item in relatedTopics" :key="item.slug" :href="`/collections/${item.slug}`">{{ item.title }} <span aria-hidden="true">→</span></a>
+          <a class="underlined-link" :href="`/discover?category=${collection.category}`">更多{{ collectionCategoryLabel }}作品</a>
+        </nav>
       </section>
     </template>
 

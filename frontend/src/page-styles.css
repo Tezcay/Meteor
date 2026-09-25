@@ -1320,7 +1320,14 @@ button:not(:disabled):active,
   margin-bottom: 114px;
   padding-top: 24px;
   border-top: 1px solid var(--line);
-}
+}.collection-continue p { margin: 9px 0 0; color: var(--muted); font-size: 13px; }
+.collection-continue-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 12px 20px; }
+.collection-continue-links a { color: var(--accent); font-size: 13px; text-decoration: none; }
+.collection-continue-links a:hover,
+.collection-continue-links a:focus-visible { color: var(--ink); text-decoration: underline; text-underline-offset: 4px; }
+.collection-continue-links span { display: inline-block; margin-left: 5px; transition: transform 180ms ease; }
+.collection-continue-links a:hover span,
+.collection-continue-links a:focus-visible span { transform: translateX(3px); }
 .product-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(330px, 0.85fr);
