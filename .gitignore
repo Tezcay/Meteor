@@ -10,3 +10,5 @@
 !.env.example
 *.log
 /learning-labs/out/
+
+/learning-labs/
