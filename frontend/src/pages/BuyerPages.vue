@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import EmptyCategoryScene from '../components/EmptyCategoryScene.vue'
 import InnerHeader from '../components/InnerHeader.vue'
 import { getProductDetail, getPublishedProducts } from '../api/products'
-import { categories, categoryOptions, parseCategory, subcategoryLabel } from '../data/categories'
+import { categoryOptions, parseCategory, subcategoryLabel } from '../data/categories'
 import { getLocalPurchase, saveLocalPurchase, saveLocalRole } from '../data/localStore'
 import type { LocalRole } from '../data/localStore'
 import {
+  artworkCollections,
   collectionSlugFor,
   getArtworkCollection,
   seededProduct,
@@ -32,6 +32,9 @@ const productLoading = ref(false)
 const catalog = ref<ProductListItemResponse[]>([])
 const catalogLoading = ref(false)
 const catalogError = ref(false)
+const catalogSort = ref<'featured' | 'newest' | 'rating'>('featured')
+const catalogPage = ref(1)
+const catalogPageSize = 12
 const signInNotice = ref(false)
 const loginRole = ref<Exclude<LocalRole, 'visitor'>>('user')
 const activeImageIndex = ref(0)
@@ -66,35 +69,32 @@ const packageOption = computed(
     displayProduct.value.packages[0]!,
 )
 const isDemoProduct = computed(() => !product.value)
-const exhibitionShelves = computed(() => {
-  if (category.value === 'all') {
-    return categories.map((item) => ({
-      value: item.value,
-      category: item.value,
-      label: item.label,
-      items: showcaseItems.filter((work) => work.category === item.value),
-    }))
-  }
+const featuredCollections = computed(() =>
+  artworkCollections.filter(
+    (item) => category.value === 'all' || item.category === category.value,
+  ),
+)
+const catalogWorks = computed(() => {
+  const keyword = query.value.trim().toLocaleLowerCase()
+  const items = showcaseItems.filter((work) => {
+    if (category.value !== 'all' && work.category !== category.value) return false
+    if (!keyword) return true
+    return [work.title, work.maker, work.description, work.tags.join(' ')]
+      .join(' ')
+      .toLocaleLowerCase()
+      .includes(keyword)
+  })
 
-  const selectedCategory = category.value
-  const groups = new Map<string, (typeof showcaseItems)[number][]>()
-  showcaseItems
-    .filter((work) => work.category === selectedCategory)
-    .forEach((work) => groups.set(work.subcategory, [...(groups.get(work.subcategory) ?? []), work]))
-
-  return [...groups.entries()].map(([subcategory, items]) => ({
-    value: `${selectedCategory}-${subcategory}`,
-    category: selectedCategory,
-    label: subcategoryLabel(selectedCategory, subcategory),
-    items,
-  }))
+  return [...items].sort((left, right) => {
+    if (catalogSort.value === 'newest') return right.variant - left.variant
+    if (catalogSort.value === 'rating') return Number(right.featured) - Number(left.featured)
+    return Number(right.featured) - Number(left.featured) || left.variant - right.variant
+  })
 })
-const catalogItems = computed(() =>
-  category.value === 'all'
-    ? catalog.value
-    : category.value === 'templates'
-      ? catalog.value.filter((item) => item.id === 1001)
-      : [],
+const visibleCatalogWorks = computed(() => catalogWorks.value.slice(0, catalogPage.value * catalogPageSize))
+const hasMoreCatalogWorks = computed(() => visibleCatalogWorks.value.length < catalogWorks.value.length)
+const loadedCatalogProducts = computed(() =>
+  category.value === 'all' || category.value === 'templates' ? catalog.value : [],
 )
 const section = computed(() =>
   props.path === '/library' || props.path.startsWith('/orders') ? 'library' : 'discover',
@@ -145,6 +145,7 @@ watch([query, category], () => {
   catalog.value = []
   catalogLoading.value = true
   catalogError.value = false
+  catalogPage.value = 1
   searchTimer = setTimeout(() => void loadCatalog(), 250)
 })
 
@@ -201,6 +202,10 @@ function clearFilters() {
   setCategory('all')
 }
 
+function loadMoreCatalogWorks() {
+  catalogPage.value += 1
+}
+
 function completeDemoPurchase() {
   if (!packageOption.value) return
   localPurchase.value = saveLocalPurchase({
@@ -226,69 +231,6 @@ function signInWithDemoRole() {
   void router.replace(destination)
 }
 
-function scrollShelf(categoryValue: string, direction: -1 | 1) {
-  const rail = document.getElementById(`rail-${categoryValue}`)
-  if (!rail) return
-  const behavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
-  rail.scrollBy({ left: direction * Math.round(rail.clientWidth * 0.78), behavior })
-}
-
-type RailDragState = { startX: number; startScrollLeft: number; dragging: boolean }
-const railDrags = new WeakMap<HTMLElement, RailDragState>()
-
-function startRailDrag(event: PointerEvent) {
-  if (event.pointerType === 'touch' || event.button !== 0) return
-  const rail = event.currentTarget as HTMLElement
-  railDrags.set(rail, { startX: event.clientX, startScrollLeft: rail.scrollLeft, dragging: false })
-  rail.setPointerCapture(event.pointerId)
-}
-
-function moveRailDrag(event: PointerEvent) {
-  const rail = event.currentTarget as HTMLElement
-  const state = railDrags.get(rail)
-  if (!state) return
-  const distance = event.clientX - state.startX
-  if (Math.abs(distance) > 3) {
-    state.dragging = true
-    rail.classList.add('is-dragging')
-  }
-  rail.scrollLeft = state.startScrollLeft - distance
-}
-
-function endRailDrag(event: PointerEvent) {
-  const rail = event.currentTarget as HTMLElement
-  railDrags.delete(rail)
-  rail.classList.remove('is-dragging')
-  if (rail.hasPointerCapture(event.pointerId)) rail.releasePointerCapture(event.pointerId)
-}
-
-function wheelShelf(event: WheelEvent) {
-  const rail = event.currentTarget as HTMLElement
-  if (Math.abs(event.deltaY) < Math.abs(event.deltaX)) return
-  const canScroll = rail.scrollWidth > rail.clientWidth
-  if (!canScroll) return
-  event.preventDefault()
-  rail.scrollBy({ left: event.deltaY, behavior: 'auto' })
-}
-
-function tiltCard(event: PointerEvent) {
-  if (event.pointerType !== 'mouse' || window.matchMedia('(prefers-reduced-motion: reduce)').matches)
-    return
-  const card = event.currentTarget as HTMLElement
-  const bounds = card.getBoundingClientRect()
-  const x = (event.clientX - bounds.left) / bounds.width - 0.5
-  const y = (event.clientY - bounds.top) / bounds.height - 0.5
-  card.style.setProperty('--tilt-x', `${(-y * 2.2).toFixed(2)}deg`)
-  card.style.setProperty('--tilt-y', `${(x * 2.2).toFixed(2)}deg`)
-  card.classList.add('is-tilting')
-}
-
-function resetCardTilt(event: PointerEvent) {
-  const card = event.currentTarget as HTMLElement
-  card.classList.remove('is-tilting')
-  card.style.removeProperty('--tilt-x')
-  card.style.removeProperty('--tilt-y')
-}
 </script>
 
 <template>
@@ -307,118 +249,94 @@ function resetCardTilt(event: PointerEvent) {
             {{ item.label }}
           </button>
         </nav>
-        <div v-if="!query.trim() && exhibitionShelves.length" class="curation-shelves">
-          <section
-            v-for="shelf in exhibitionShelves"
-            :key="shelf.value"
-            class="curation-shelf"
-            :aria-labelledby="`shelf-${shelf.value}`"
-          >
-            <header class="curation-shelf-heading">
-              <h2 :id="`shelf-${shelf.value}`">{{ shelf.label }}</h2>
-              <div class="curation-shelf-actions">
-                <a v-if="category === 'all'" :href="`/discover?category=${shelf.category}`">查看</a>
-                <span v-else>{{ shelf.items.length }} 件</span>
-                <div class="curation-shelf-controls" :aria-label="`浏览${shelf.label}`">
-                  <button type="button" :aria-label="`向左浏览${shelf.label}`" @click="scrollShelf(shelf.value, -1)">←</button>
-                  <button type="button" :aria-label="`向右浏览${shelf.label}`" @click="scrollShelf(shelf.value, 1)">→</button>
-                </div>
-              </div>
-            </header>
-            <div
-              :id="`rail-${shelf.value}`"
-              class="curation-rail"
-              tabindex="0"
-              :aria-label="`${shelf.label}作品列表，可拖动或使用滚轮浏览`"
-              @pointerdown="startRailDrag"
-              @pointermove="moveRailDrag"
-              @pointerup="endRailDrag"
-              @pointercancel="endRailDrag"
-              @wheel="wheelShelf"
-            >
-              <article
-                v-for="item in shelf.items"
-                :key="item.title"
-                class="curation-card"
-                :class="[`curation-${item.art}`, `variant-${item.variant}`]"
-                @pointermove="tiltCard"
-                @pointerleave="resetCardTilt"
-              >
-                <component
-                  :is="collectionLink(item) ? 'a' : 'div'"
-                  :href="collectionLink(item)"
-                  :aria-label="collectionLink(item) ? `查看图集：${item.title}` : undefined"
-                >
-                  <div class="curation-art" :class="[`art-${item.art}`, `variant-${item.variant}`]">
-                    <img v-if="item.image" :src="item.image" :alt="item.description" loading="lazy" />
-                    <div
-                      v-else
-                      class="demo-piece"
-                      :class="[`demo-${item.category}`, `variant-${item.variant}`]"
-                      aria-hidden="true"
-                    >
-                      <small>{{ item.mark }}</small>
-                      <strong>{{ item.title }}</strong>
-                      <div class="demo-shapes"><i></i><i></i><i></i><i></i></div>
-                    </div>
-                  </div>
-                  <h3>{{ item.title }}</h3>
-                </component>
-              </article>
-            </div>
-          </section>
-        </div>
-        <EmptyCategoryScene
-          v-if="
-            !query.trim() &&
-            category !== 'all' &&
-            category !== 'templates' &&
-            !exhibitionShelves.length
-          "
-          :category="category"
-          @reset="clearFilters"
-        />
         <section
-          v-if="
-            ['all', '模板', 'templates'].includes(category) &&
-            (catalogItems.length || catalogLoading)
-          "
-          class="catalog-section"
-          aria-labelledby="catalog-title"
+          v-if="!query.trim() && featuredCollections.length"
+          class="collection-index"
+          aria-labelledby="collection-index-title"
         >
+          <div class="collection-index-heading">
+            <div>
+              <h1 id="collection-index-title">专题</h1>
+              <p>从一组完整的作品开始浏览</p>
+            </div>
+          </div>
+          <div class="collection-index-grid">
+            <a
+              v-for="item in featuredCollections"
+              :key="item.slug"
+              class="collection-index-card"
+              :href="`/collections/${item.slug}`"
+            >
+              <div class="collection-index-image">
+                <img :src="item.images[0]?.src" :alt="item.images[0]?.alt" loading="lazy" />
+                <span>{{ item.images.length }} 件作品</span>
+              </div>
+              <div class="collection-index-copy">
+                <h2>{{ item.title }}</h2>
+                <p>{{ item.summary }}</p>
+                <span>{{ item.maker }} <i aria-hidden="true">→</i></span>
+              </div>
+            </a>
+          </div>
+        </section>
+        <section class="catalog-section" aria-labelledby="catalog-title">
           <div class="catalog-heading">
             <div>
-              <h2 id="catalog-title">作品</h2>
+              <h1 id="catalog-title">全部作品</h1>
+              <p>{{ catalogWorks.length + loadedCatalogProducts.length }} 件可浏览内容</p>
             </div>
-            <span v-if="catalogLoading" class="quiet-note">正在读取作品</span>
+            <label class="catalog-sort">
+              <span>排序</span>
+              <select v-model="catalogSort" aria-label="作品排序">
+                <option value="featured">编辑精选</option>
+                <option value="newest">最新加入</option>
+                <option value="rating">评分优先</option>
+              </select>
+            </label>
           </div>
-          <a
-            v-for="item in catalogItems"
-            :key="item.id"
-            class="catalog-product"
-            :href="`/products/${item.id}`"
-            ><div class="catalog-product-art">
-              <span>{{ item.shopName }}</span
-              ><strong v-if="item.id === 1001">把经历<br />排成故事</strong
-              ><strong v-else>{{ item.title }}</strong
-              ><small>{{ item.id === 1001 ? '简历 / 求职信 / 作品集' : 'DIGITAL WORKS' }}</small>
-            </div>
-            <div class="catalog-product-copy">
-              <span>{{ item.id === 1001 ? '实用模板' : '数字作品' }} · {{ item.shopName }}</span>
-              <h3>{{ item.title }}</h3>
-              <p>{{ item.summary.replace(/[。！？]+$/, '') }}</p>
-              <span class="text-arrow">查看作品 ↗</span>
-            </div></a
-          >
-        </section>
-        <div v-else-if="query.trim() && !catalogLoading" class="empty-state">
-          <h2>没有找到相关作品</h2>
-          <p>试试其他关键词</p>
-          <button class="button button-secondary" type="button" @click="clearFilters">
-            清除筛选
-          </button>
-        </div>
-      </section>
+          <div v-if="visibleCatalogWorks.length || loadedCatalogProducts.length" class="catalog-grid">
+            <article v-for="item in visibleCatalogWorks" :key="`${item.category}-${item.title}`" class="catalog-work">
+              <component
+                :is="collectionLink(item) ? 'a' : 'div'"
+                :href="collectionLink(item) || undefined"
+                class="catalog-work-art"
+                :class="[`art-${item.art}`, `variant-${item.variant}`, { 'is-static': !collectionLink(item) }]"
+                :aria-label="collectionLink(item) ? `查看系列：${item.title}` : undefined"
+              >
+                <img v-if="item.image" :src="item.image" :alt="item.description" loading="lazy" />
+                <div v-else class="demo-piece" :class="[`demo-${item.category}`, `variant-${item.variant}`]" aria-hidden="true">
+                  <small>{{ item.mark }}</small>
+                  <strong>{{ item.title }}</strong>
+                  <div class="demo-shapes"><i></i><i></i><i></i><i></i></div>
+                </div>
+              </component>
+              <div class="catalog-work-copy">
+                <span>{{ subcategoryLabel(item.category, item.subcategory) }}</span>
+                <h2>{{ item.title }}</h2>
+                <p>{{ item.maker }}</p>
+              </div>
+            </article>
+            <a v-for="item in loadedCatalogProducts" :key="`api-${item.id}`" class="catalog-work" :href="`/products/${item.id}`">
+              <div class="catalog-work-art catalog-api-piece">
+                <span>{{ item.shopName }}</span>
+                <strong>{{ item.title }}</strong>
+                <small>已发布作品</small>
+              </div>
+              <div class="catalog-work-copy">
+                <span>数字作品</span>
+                <h2>{{ item.title }}</h2>
+                <p>{{ item.summary.replace(/[。！？]+$/, '') }}</p>
+              </div>
+            </a>
+          </div>
+          <div v-else class="catalog-empty">
+            <h2>这里还没有匹配的作品</h2>
+            <button class="button button-secondary" type="button" @click="clearFilters">清除筛选</button>
+          </div>
+          <div v-if="hasMoreCatalogWorks" class="catalog-more">
+            <button class="button button-secondary" type="button" @click="loadMoreCatalogWorks">加载更多作品</button>
+          </div>
+        </section>      </section>
     </template>
 
     <template v-else-if="path === '/shops/northstar'">
