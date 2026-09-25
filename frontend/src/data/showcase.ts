@@ -145,6 +145,15 @@ const posterImages: Array<[string, string, string]> = [
   ['雪地木屋', '/images/posters/winter-cabin.webp', '雪地木屋亮着暖光，背后是湖泊与群山'],
   ['山野秋色', '/images/posters/wild-places.webp', '雪山、深色松林与金色秋树'],
 ]
+const winterPosterTitles = new Set(['冬日松林', '雪山湖畔', '雪地木屋'])
+const posterTags: Record<string, string[]> = {
+  冬日松林: ['冬日', '松林', '雪景'],
+  静谧建筑: ['建筑', '几何', '蓝天'],
+  雪山湖畔: ['冬日', '湖泊', '松林'],
+  暮色原野: ['黄昏', '原野', '人物'],
+  雪地木屋: ['冬日', '木屋', '雪景'],
+  山野秋色: ['秋日', '山野', '金色'],
+}
 const posterItems: ShowcaseItem[] = posterImages.map(([title, image, description], variant) => ({
   title,
   category: 'illustration',
@@ -156,9 +165,9 @@ const posterItems: ShowcaseItem[] = posterImages.map(([title, image, description
   variant,
   featured: variant < 2,
   subcategory: 'landscape',
-  tags: ['风景', '冬日', '纸本质感'],
-  // This is a manually curated sequence, not an automatic "similar work" result.
-  collectionSlug: 'winter-stillness',
+  tags: ['风景', '纸本质感', ...(posterTags[title] ?? [])],
+  // Only the declared winter trio is an editorial sequence; visual similarity is not enough.
+  collectionSlug: winterPosterTitles.has(title) ? 'winter-stillness' : undefined,
 }))
 
 // Editorial demonstrations are browsing material, not purchasable product records.
