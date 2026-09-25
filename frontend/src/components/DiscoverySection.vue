@@ -1,41 +1,11 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { categoryLabel } from '../data/categories'
-import { showcaseItems } from '../data/showcase'
 import type { DiscoveryCategory } from '../types/discovery'
 
-const props = defineProps<{ activeCategory: DiscoveryCategory }>()
 defineEmits<{ browse: [category: DiscoveryCategory] }>()
-
-const selectedItems = computed(() =>
-  props.activeCategory === 'all'
-    ? []
-    : showcaseItems.filter((item) => item.category === props.activeCategory).slice(0, 6),
-)
 </script>
 
 <template>
   <section id="category-preview" class="discovery-section content-width" aria-labelledby="discover-title">
-    <template v-if="activeCategory !== 'all'">
-      <div class="section-heading home-category-heading">
-        <h2 id="discover-title" tabindex="-1">{{ categoryLabel(activeCategory) }}</h2>
-        <button class="home-category-open" type="button" @click="$emit('browse', activeCategory)">打开完整分类</button>
-      </div>
-      <div class="home-category-preview" :aria-label="`${categoryLabel(activeCategory)}精选预览`">
-        <article v-for="item in selectedItems" :key="item.mark" class="home-category-item">
-          <div class="home-category-art" :class="`art-${item.art}`">
-            <img v-if="item.image" :src="item.image" :alt="item.description" loading="lazy" />
-            <template v-else>
-              <span>{{ item.mark }}</span>
-              <strong>{{ item.title }}</strong>
-            </template>
-          </div>
-          <h3>{{ item.title }}</h3>
-        </article>
-      </div>
-    </template>
-
-    <template v-else>
       <div class="section-heading">
         <h2 id="discover-title" tabindex="-1">精选分类</h2>
       </div>
@@ -163,6 +133,5 @@ const selectedItems = computed(() =>
         </div>
       </article>
       </div>
-    </template>
   </section>
 </template>

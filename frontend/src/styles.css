@@ -1855,58 +1855,6 @@ html:has(.site-dialog[open]) {
 .mark-three-d { background: #d8bd91; }
 .mark-audio { background: #60655f; }
 .mark-publications { background: #9f8167; }
-.home-category-heading {
-  align-items: center;
-  margin-bottom: 30px;
-}
-.home-category-heading h2 { margin: 0; }
-.home-category-open {
-  padding: 0 0 4px;
-  border: 0;
-  border-bottom: 1px solid currentColor;
-  background: transparent;
-  color: var(--muted);
-  cursor: pointer;
-  font: inherit;
-  font-size: 14px;
-  transition: color 180ms ease, transform 180ms ease;
-}
-.home-category-open:hover,
-.home-category-open:focus-visible { color: var(--ink); transform: translateX(2px); }
-.home-category-preview {
-  display: grid;
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(190px, 1fr);
-  grid-template-rows: 1fr;
-  gap: 18px;
-  overflow-x: auto;
-  padding-bottom: 9px;
-  scroll-snap-type: x proximity;
-  scrollbar-width: thin;
-  scrollbar-color: #b9bbb2 transparent;
-}
-.home-category-preview::-webkit-scrollbar { height: 6px; }
-.home-category-preview::-webkit-scrollbar-thumb { background: #b9bbb2; border-radius: 999px; }
-.home-category-item { min-width: 0; scroll-snap-align: start; }
-.home-category-art {
-  display: grid;
-  min-height: 200px;
-  overflow: hidden;
-  background: #e8e8e1;
-}
-.home-category-art img { width: 100%; height: 100%; object-fit: cover; }
-.home-category-art.art-photo { aspect-ratio: 5 / 4; }
-.home-category-art.art-poster { aspect-ratio: 3 / 4; }
-.home-category-art.art-demo {
-  align-content: space-between;
-  aspect-ratio: 5 / 4;
-  padding: 18px;
-  background: #dce2d5;
-  color: #2f493b;
-}
-.home-category-art.art-demo span { font-size: 11px; letter-spacing: 0.08em; }
-.home-category-art.art-demo strong { max-width: 7em; font-size: 29px; line-height: 1.08; letter-spacing: -0.06em; }
-.home-category-item h3 { margin: 11px 0 0; font-size: 15px; font-weight: 500; }
 @keyframes carousel-orbit {
   from { transform: rotate(-11deg) translate3d(-1%, -1%, 0); }
   to { transform: rotate(-7deg) translate3d(2%, 2%, 0); }

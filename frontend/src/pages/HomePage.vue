@@ -53,7 +53,7 @@ function selectHomeCategory(category: DiscoveryCategory) {
   <main id="main" tabindex="-1">
     <CategoryNavigation :active-category="activeCategory" @select="selectHomeCategory" />
     <HeroSection :active-category="activeCategory" />
-    <DiscoverySection :active-category="activeCategory" @browse="explore($event)" />
+    <DiscoverySection @browse="explore($event)" />
     <CreatorSection @publish="router.push('/creator/start')" />
   </main>
   <SiteFooter />
