@@ -4,6 +4,22 @@ import type { DiscoveryCategory } from '../types/discovery'
 
 defineProps<{ activeCategory: DiscoveryCategory }>()
 defineEmits<{ select: [category: DiscoveryCategory] }>()
+
+const categoryTones: Record<DiscoveryCategory, string> = {
+  all: '#303d37',
+  design: '#9ca979',
+  templates: '#a7c6ca',
+  photography: '#6f8f7c',
+  illustration: '#315b86',
+  fonts: '#9e83bd',
+  'three-d': '#c79f60',
+  audio: '#515950',
+  publications: '#8d6f59',
+}
+
+function toneFor(category: DiscoveryCategory) {
+  return categoryTones[category]
+}
 </script>
 
 <template>
@@ -13,6 +29,7 @@ defineEmits<{ select: [category: DiscoveryCategory] }>()
       <button
         class="interest-link"
         :class="{ 'is-active': activeCategory === 'all' }"
+        :style="{ '--interest-tone': toneFor('all') }"
         type="button"
         :aria-pressed="activeCategory === 'all'"
         @click="$emit('select', 'all')"
@@ -22,6 +39,7 @@ defineEmits<{ select: [category: DiscoveryCategory] }>()
         :key="category.value"
         class="interest-link"
         :class="{ 'is-active': activeCategory === category.value }"
+        :style="{ '--interest-tone': toneFor(category.value) }"
         type="button"
         :aria-pressed="activeCategory === category.value"
         :aria-label="'在首页查看' + category.label"

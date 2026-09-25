@@ -2115,3 +2115,17 @@ html:has(.site-dialog[open]) {
     padding: 30px 24px 34px;
   }
 }
+
+/* Homepage media index: an editorial strip, not a container of generic pills. */
+.interest-navigation { position: relative; min-height: 0; margin-top: 18px; padding: 0; border: 0; border-top: 1px solid #d7d7cf; border-bottom: 1px solid #d7d7cf; border-radius: 0; background: transparent; overflow-x: auto; scrollbar-width: none; }
+.interest-links { min-height: 68px; width: max-content; gap: 0; padding: 0 2px; }
+.interest-link { position: relative; min-height: 68px; gap: 10px; padding: 0 17px; border: 0; border-radius: 0; color: #656861; font-size: 14px; letter-spacing: -0.01em; transition: color 220ms ease, background 220ms ease, padding 220ms cubic-bezier(.2,.8,.2,1); }
+.interest-link + .interest-link::before { content: ''; width: 1px; height: 18px; margin-right: 2px; background: #d9d9d1; }
+.interest-link::after { content: ''; position: absolute; right: 17px; bottom: 11px; left: 17px; height: 2px; background: var(--interest-tone); transform: scaleX(0); transform-origin: center; transition: transform 240ms cubic-bezier(.2,.8,.2,1); }
+.interest-link:hover, .interest-link:focus-visible, .interest-link.is-active { border: 0; background: color-mix(in srgb, var(--interest-tone) 8%, transparent); color: #252b27; }
+.interest-link.is-active { padding-inline: 21px; }
+.interest-link:hover::after, .interest-link:focus-visible::after, .interest-link.is-active::after { transform: scaleX(1); }
+.interest-mark { width: 4px; height: 24px; border-radius: 0; background: var(--interest-tone); transform: none; transition: height 220ms cubic-bezier(.2,.8,.2,1), width 220ms ease, border-radius 220ms ease; }
+.interest-link:hover .interest-mark, .interest-link:focus-visible .interest-mark, .interest-link.is-active .interest-mark { width: 6px; height: 30px; border-radius: 4px; transform: none; }
+.interest-link:focus-visible { outline: 2px solid var(--interest-tone); outline-offset: -3px; }
+@media (max-width: 680px) { .interest-navigation { margin-top: 10px; } .interest-links { min-height: 58px; } .interest-link { min-height: 58px; padding-inline: 14px; } .interest-link.is-active { padding-inline: 17px; } .interest-mark { height: 20px; } }
