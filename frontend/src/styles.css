@@ -2129,3 +2129,50 @@ html:has(.site-dialog[open]) {
 .interest-link:hover .interest-mark, .interest-link:focus-visible .interest-mark, .interest-link.is-active .interest-mark { width: 6px; height: 30px; border-radius: 4px; transform: none; }
 .interest-link:focus-visible { outline: 2px solid var(--interest-tone); outline-offset: -3px; }
 @media (max-width: 680px) { .interest-navigation { margin-top: 10px; } .interest-links { min-height: 58px; } .interest-link { min-height: 58px; padding-inline: 14px; } .interest-link.is-active { padding-inline: 17px; } .interest-mark { height: 20px; } }
+/* Centered category blocks replace the previous left-weighted index marks. */
+.interest-navigation {
+  margin-top: 20px;
+  border-top-color: #deded7;
+  border-bottom-color: #deded7;
+}
+.interest-links {
+  width: 100%;
+  min-height: 72px;
+  justify-content: center;
+  gap: 7px;
+  padding-inline: 10px;
+}
+.interest-link {
+  min-height: 42px;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+}
+.interest-link + .interest-link::before { display: none; }
+.interest-link::after { display: none; }
+.interest-link:hover,
+.interest-link:focus-visible,
+.interest-link.is-active {
+  border-color: color-mix(in srgb, var(--interest-tone) 28%, transparent);
+  background: color-mix(in srgb, var(--interest-tone) 15%, #fff);
+}
+.interest-link.is-active { padding-inline: 16px; }
+.interest-mark {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--interest-tone);
+  transform: none;
+}
+.interest-link:hover .interest-mark,
+.interest-link:focus-visible .interest-mark,
+.interest-link.is-active .interest-mark {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  transform: none;
+}
+@media (max-width: 860px) {
+  .interest-links { width: max-content; justify-content: flex-start; }
+}
