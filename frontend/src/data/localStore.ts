@@ -12,6 +12,7 @@ export type LocalWork = {
   version: string
   packageName: string
   files: string[]
+  previewImages?: string[]
   category: string
   subcategory: string
   tags: string[]

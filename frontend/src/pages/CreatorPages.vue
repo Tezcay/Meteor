@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import InnerHeader from '../components/InnerHeader.vue'
 import { categoryTaxonomy, categories } from '../data/categories'
 import { getLocalProfile, getLocalWorks, saveLocalProfile, saveLocalWork, type LocalWork } from '../data/localStore'
@@ -29,6 +29,7 @@ const workCategory = ref<Exclude<DiscoveryCategory, 'all'>>('templates')
 const workSubcategory = ref('work')
 const tagInput = ref('')
 const localFileNames = ref<string[]>([])
+const previewImages = ref<Array<{ id: number; name: string; url: string }>>([])
 const editorNotice = ref('')
 const reviewTab = ref<'draft' | 'review' | 'published' | 'rejected'>('review')
 const localWorks = ref<LocalWork[]>(getLocalWorks())
@@ -49,7 +50,26 @@ function addLocalFiles(event: Event) {
   const input = event.target as HTMLInputElement
   localFileNames.value = Array.from(input.files ?? []).map((file) => file.name)
   editorNotice.value = localFileNames.value.length ? '文件仅显示在当前浏览器中，尚未上传' : ''
+}function addPreviewImages(event: Event) {
+  const input = event.target as HTMLInputElement
+  const selected = Array.from(input.files ?? []).filter((file) => file.type.startsWith('image/'))
+  previewImages.value.forEach((item) => URL.revokeObjectURL(item.url))
+  previewImages.value = selected.map((file, index) => ({ id: Date.now() + index, name: file.name, url: URL.createObjectURL(file) }))
+  editorNotice.value = previewImages.value.length ? '预览图已加入队列，第一张将作为封面' : '请选择 JPG、PNG 或 WEBP 图片'
+  input.value = ''
 }
+function movePreview(index: number, direction: -1 | 1) {
+  const next = index + direction
+  if (next < 0 || next >= previewImages.value.length) return
+  const items = [...previewImages.value]
+  ;[items[index], items[next]] = [items[next]!, items[index]!]
+  previewImages.value = items
+}
+function removePreview(index: number) {
+  const [removed] = previewImages.value.splice(index, 1)
+  if (removed) URL.revokeObjectURL(removed.url)
+}
+onBeforeUnmount(() => previewImages.value.forEach((item) => URL.revokeObjectURL(item.url)))
 function savePreview() {
   if (!editorTitle.value.trim()) {
     editorNotice.value = '先填写作品名称，再保存草稿'
@@ -61,6 +81,7 @@ function savePreview() {
     version: versionLabel.value.trim() || 'v1.0',
     packageName: packageName.value.trim() || 'Basic',
     files: localFileNames.value,
+    previewImages: previewImages.value.map((item) => item.name),
     category: workCategory.value,
     subcategory: workSubcategory.value,
     tags: workTags.value,
@@ -81,6 +102,7 @@ function submitForReview() {
       version: versionLabel.value.trim() || 'v1.0',
       packageName: packageName.value.trim() || 'Basic',
       files: localFileNames.value,
+      previewImages: previewImages.value.map((item) => item.name),
       category: workCategory.value,
       subcategory: workSubcategory.value,
       tags: workTags.value,
@@ -264,6 +286,34 @@ function saveOnboarding() {
             <section class="editor-section">
               <div class="editor-section-title">
                 <span>4</span>
+                <div>
+                  <h2>作品预览图</h2>
+                  <p>一份作品可以包含多张图，第一张会作为封面</p>
+                </div>
+              </div>
+              <label class="file-drop" for="preview-files"
+                ><strong>加入预览图，随后调整顺序</strong
+                ><span>仅在当前浏览器生成预览，不会上传</span
+                ><input id="preview-files" type="file" accept="image/*" multiple @change="addPreviewImages"
+              /></label>
+              <div v-if="previewImages.length" class="preview-queue" aria-label="预览图队列">
+                <article v-for="(item, index) in previewImages" :key="item.id" class="preview-queue-item">
+                  <img :src="item.url" :alt="item.name" />
+                  <div>
+                    <strong>{{ index === 0 ? '封面' : `第 ${index + 1} 张` }}</strong>
+                    <span>{{ item.name }}</span>
+                  </div>
+                  <div class="preview-queue-actions">
+                    <button type="button" :disabled="index === 0" aria-label="上移" @click="movePreview(index, -1)">↑</button>
+                    <button type="button" :disabled="index === previewImages.length - 1" aria-label="下移" @click="movePreview(index, 1)">↓</button>
+                    <button type="button" aria-label="移除预览图" @click="removePreview(index)">×</button>
+                  </div>
+                </article>
+              </div>
+            </section>
+            <section class="editor-section">
+              <div class="editor-section-title">
+                <span>5</span>
                 <div>
                   <h2>交付文件</h2>
                   <p>交付文件与公开预览分开管理</p>
