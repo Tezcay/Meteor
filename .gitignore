@@ -9,3 +9,4 @@
 .env.*
 !.env.example
 *.log
+/learning-labs/out/
