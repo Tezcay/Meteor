@@ -172,10 +172,6 @@ function setCategory(value: DiscoveryCategory) {
   if (value !== 'illustration') delete nextQuery.topic
   void router.replace({ path: '/discover', query: nextQuery })
 }
-function setIllustrationTopic(slug: string) {
-  topic.value = slug
-  void router.replace({ path: '/discover', query: { ...route.query, category: 'illustration', topic: slug } })
-}
 
 watch(
   () => route.fullPath,
@@ -271,14 +267,13 @@ function signInWithDemoRole() {
             </div>
           </div>
           <div v-if="category === 'illustration'" class="illustration-topic-grid" aria-label="插画主题">
-            <button
+            <a
               v-for="item in featuredIllustrationTopics"
               :key="item.slug"
               class="illustration-topic-card"
               :class="{ 'is-active': topic === item.slug }"
-              type="button"
-              :aria-pressed="topic === item.slug"
-              @click="setIllustrationTopic(item.slug)"
+              :href="`/collections/${item.slug}`"
+              :aria-current="topic === item.slug ? 'page' : undefined"
             >
               <div class="illustration-topic-image">
                 <img :src="item.cover.src" :alt="item.cover.alt" loading="lazy" />
@@ -289,7 +284,7 @@ function signInWithDemoRole() {
                 <p>{{ item.description }}</p>
                 <span>浏览此主题 <i aria-hidden="true">→</i></span>
               </div>
-            </button>
+            </a>
           </div>
           <div v-else class="collection-index-grid">
             <a

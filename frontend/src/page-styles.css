@@ -2950,6 +2950,7 @@ button:not(:disabled):active,
   color: inherit;
   cursor: pointer;
   text-align: left;
+  text-decoration: none;
   transition: border-color 180ms ease;
 }
 .illustration-topic-card:first-child { border-color: color-mix(in srgb, var(--accent) 46%, var(--line)); }

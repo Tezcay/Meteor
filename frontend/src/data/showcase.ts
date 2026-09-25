@@ -242,6 +242,26 @@ export const artworkCollections: ArtworkCollection[] = [
       .filter(([title]) => winterPosterTitles.has(title))
       .map(([title, src, alt]) => ({ src, alt: `${title}：${alt}` })),
   },
+  {
+    slug: 'quiet-architecture',
+    title: '静谧建筑',
+    maker: '编辑精选',
+    category: 'illustration',
+    summary: '一张以几何体、蓝天与克制光线为主角的建筑插画',
+    images: posterImages
+      .filter(([title]) => posterTopics[title] === 'quiet-architecture')
+      .map(([title, src, alt]) => ({ src, alt: `${title}：${alt}` })),
+  },
+  {
+    slug: 'landscape-narrative',
+    title: '风景叙事',
+    maker: '编辑精选',
+    category: 'illustration',
+    summary: '两张关于原野、山色与人物停留的风景插画',
+    images: posterImages
+      .filter(([title]) => posterTopics[title] === 'landscape-narrative')
+      .map(([title, src, alt]) => ({ src, alt: `${title}：${alt}` })),
+  },
 ]
 
 export function collectionSlugFor(item: ShowcaseItem) {
