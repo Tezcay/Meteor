@@ -40,6 +40,8 @@ const catalogPageSize = 12
 const signInNotice = ref(false)
 const loginRole = ref<Exclude<LocalRole, 'visitor'>>('user')
 const activeImageIndex = ref(0)
+const localRating = ref(0)
+const ratingNotice = ref('')
 const collectionSaved = ref(false)
 const localPurchase = ref(getLocalPurchase())
 let request: AbortController | null = null
@@ -70,6 +72,23 @@ const requestedProductId = computed(() =>
 const displayProduct = computed(() => product.value ?? seededProduct)
 const canShowProduct = computed(() => product.value !== null || requestedProductId.value === 1001)
 const productSummary = computed(() => displayProduct.value.summary.replace(/[。！？]+$/, ''))
+type ProductPreview = { label: string; eyebrow: string; title: string; subtitle: string; footer: string }
+const productPreviewOptions = computed<ProductPreview[]>(() => {
+  if (displayProduct.value.id !== 1001) {
+    return [
+      { label: '封面', eyebrow: displayProduct.value.shopName + ' / DIGITAL WORKS', title: displayProduct.value.title, subtitle: '精选预览', footer: 'PREVIEW · 01' },
+      { label: '内容', eyebrow: 'CONTENTS / 02', title: '内容结构', subtitle: '清晰可见', footer: 'DETAILS · 02' },
+      { label: '授权', eyebrow: 'LICENSE / 03', title: '交付说明', subtitle: '购买后查看', footer: 'DELIVERY · 03' },
+    ]
+  }
+  return [
+    { label: '封面', eyebrow: 'NORTHSTAR DESIGN / DIGITAL WORKS', title: '把经历', subtitle: '排成故事', footer: 'RESUME · LETTER · PORTFOLIO' },
+    { label: '版式示意', eyebrow: 'GRID / TYPE / 02', title: '清晰层级', subtitle: '让信息先被看见', footer: 'LAYOUT STUDY · 02' },
+    { label: '内容说明', eyebrow: 'DELIVERY / 03', title: '一套完整', subtitle: '从简历到作品集', footer: 'EDITABLE FILES · 03' },
+  ]
+})
+const activeProductPreview = computed(() => productPreviewOptions.value[activeImageIndex.value] ?? productPreviewOptions.value[0]!)
+const productRating = computed(() => displayProduct.value.id === 1001 ? { score: '4.8', count: 24 } : { score: '4.6', count: 8 })
 const packageOption = computed(
   () =>
     displayProduct.value.packages.find((item) => item.id === selectedPackage.value) ??
@@ -160,8 +179,10 @@ watch([query, category, topic], () => {
 
 onMounted(async () => {
   if (props.path === '/discover') void loadCatalog()
-  if (props.path === '/shops/northstar' || isProductPath.value || props.path === '/checkout')
+  if (props.path === '/shops/northstar' || isProductPath.value || props.path === '/checkout') {
+    loadLocalRating()
     void loadProduct()
+  }
 })
 onBeforeUnmount(() => {
   request?.abort()
@@ -192,10 +213,34 @@ watch(
     product.value = null
     productError.value = false
     if (props.path === '/discover') void loadCatalog()
-    if (props.path === '/shops/northstar' || isProductPath.value || props.path === '/checkout')
+    if (props.path === '/shops/northstar' || isProductPath.value || props.path === '/checkout') {
+      loadLocalRating()
       void loadProduct()
+    }
   },
 )
+
+function selectProductPreview(index: number) {
+  const count = productPreviewOptions.value.length
+  if (!count) return
+  activeImageIndex.value = (index + count) % count
+}
+function loadLocalRating() {
+  try {
+    localRating.value = Number(localStorage.getItem('meteor.product.rating.' + displayProduct.value.id) ?? 0)
+  } catch {
+    localRating.value = 0
+  }
+}
+function setLocalRating(value: number) {
+  localRating.value = value
+  ratingNotice.value = '已记录 ' + value + ' 星评分，仅保存在当前浏览器'
+  try {
+    localStorage.setItem('meteor.product.rating.' + displayProduct.value.id, String(value))
+  } catch {
+    // Local preview still works when storage is unavailable.
+  }
+}
 
 function selectCollectionImage(index: number) {
   const imageCount = collection.value?.images.length ?? 0
@@ -490,19 +535,24 @@ function signInWithDemoRole() {
         </div>
         <section class="page-width product-layout">
           <div class="product-gallery">
-            <div class="product-cover">
-              <span>{{ displayProduct.shopName }} / DIGITAL WORKS</span
-              ><strong v-if="displayProduct.id === 1001">把经历<br /><i>排成故事</i></strong
-              ><strong v-else>{{ displayProduct.title }}</strong>
+            <div class="product-cover" :class="'product-cover-variant-' + activeImageIndex">
+              <span>{{ activeProductPreview.eyebrow }}</span>
+              <strong>{{ activeProductPreview.title }}<br /><i>{{ activeProductPreview.subtitle }}</i></strong>
               <div class="product-cover-rule"></div>
-              <small>{{
-                displayProduct.id === 1001 ? 'RESUME · LETTER · PORTFOLIO' : 'DIGITAL WORKS'
-              }}</small>
+              <small>{{ activeProductPreview.footer }}</small>
             </div>
-            <div class="product-thumbs">
-              <div>预览图</div>
-              <div>版式示意</div>
-              <div>内容说明</div>
+            <div class="product-thumbs" aria-label="作品预览切换">
+              <button
+                v-for="(preview, index) in productPreviewOptions"
+                :key="preview.label"
+                type="button"
+                :aria-pressed="activeImageIndex === index"
+                @click="selectProductPreview(index)"
+              >
+                <span>{{ String(index + 1).padStart(2, '0') }}</span>
+                <strong>{{ preview.label }}</strong>
+                <small>{{ preview.title }}</small>
+              </button>
             </div>
             <p class="media-disclaimer">展示图仅供预览，不代表交付文件</p>
           </div>
@@ -513,6 +563,26 @@ function signInWithDemoRole() {
             >
             <h1>{{ displayProduct.title }}</h1>
             <p class="product-summary">{{ productSummary }}</p>
+            <section class="product-rating" aria-label="作品评分">
+              <div class="product-rating-summary">
+                <span class="rating-stars" aria-hidden="true">★★★★★</span>
+                <strong>{{ productRating.score }}</strong>
+                <span>{{ productRating.count }} 人评分</span>
+              </div>
+              <div class="rating-input" role="group" aria-label="给作品评分">
+                <span>为它打分</span>
+                <button
+                  v-for="score in 5"
+                  :key="score"
+                  type="button"
+                  :class="{ active: score <= localRating }"
+                  :aria-label="score + ' 星'"
+                  :aria-pressed="localRating === score"
+                  @click="setLocalRating(score)"
+                >★</button>
+              </div>
+              <p v-if="ratingNotice" role="status">{{ ratingNotice }}</p>
+            </section>
             <div v-if="isDemoProduct" class="inline-note">
               {{
                 productError
