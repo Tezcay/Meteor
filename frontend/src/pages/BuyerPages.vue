@@ -62,6 +62,12 @@ const previewPurchase = {
 }
 const libraryEntries = computed(() => localPurchases.value.length ? localPurchases.value : showLibraryPreview.value ? [previewPurchase] : [])
 const orderEntries = computed(() => localPurchases.value.length ? localPurchases.value : showOrderPreview.value ? [previewPurchase] : [])
+const activeOrderId = computed(() => {
+  const requested = String(route.query.order ?? '')
+  return orderEntries.value.some((purchase) => purchase.id === requested)
+    ? requested
+    : (orderEntries.value[0]?.id ?? '')
+})
 let request: AbortController | null = null
 let catalogRequest: AbortController | null = null
 let searchTimer: ReturnType<typeof setTimeout> | null = null
@@ -231,6 +237,7 @@ watch([query, category, topic], () => {
 })
 
 onMounted(async () => {
+  window.addEventListener('meteor:purchases-change', refreshLocalPurchases)
   if (props.path === '/discover') void loadCatalog()
   if (props.path === '/shops/northstar' || isProductPath.value || props.path === '/checkout') {
     loadLocalRating()
@@ -238,10 +245,15 @@ onMounted(async () => {
   }
 })
 onBeforeUnmount(() => {
+  window.removeEventListener('meteor:purchases-change', refreshLocalPurchases)
   request?.abort()
   catalogRequest?.abort()
   if (searchTimer) clearTimeout(searchTimer)
 })
+
+function refreshLocalPurchases() {
+  localPurchases.value = getLocalPurchases()
+}
 
 function setCategory(value: DiscoveryCategory) {
   category.value = value
@@ -875,7 +887,13 @@ function signInWithDemoRole() {
             <a class="button button-secondary" href="/discover">继续探索</a>
           </div>
           <section v-else class="order-list" aria-label="购买订单列表">
-            <article v-for="purchase in orderEntries" :key="purchase.id" class="order-sheet">
+            <article
+              v-for="purchase in orderEntries"
+              :key="purchase.id"
+              class="order-sheet"
+              :class="{ 'is-current': purchase.id === activeOrderId }"
+              :aria-current="purchase.id === activeOrderId ? 'true' : undefined"
+            >
               <div><span>订单编号</span><strong>#{{ purchase.id.slice(-6) }}</strong></div>
               <div><span>作品</span><strong>{{ purchase.title }}</strong></div>
               <div><span>套餐</span><strong>{{ purchase.packageName }}</strong></div>
