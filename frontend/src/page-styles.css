@@ -1942,6 +1942,16 @@ button:not(:disabled):active,
 .login-copy form button {
   margin-top: 30px;
 }
+.login-intent {
+  margin-top: 14px !important;
+  color: var(--muted);
+  font-size: 12px !important;
+  line-height: 1.6 !important;
+}
+.login-intent strong {
+  color: var(--ink);
+  font-weight: 600;
+}
 .login-copy > .underlined-link {
   margin-top: 26px;
 }

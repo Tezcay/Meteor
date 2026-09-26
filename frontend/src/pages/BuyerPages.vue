@@ -38,7 +38,14 @@ const catalogSort = ref<'featured' | 'newest' | 'rating'>('featured')
 const catalogPage = ref(1)
 const catalogPageSize = 12
 const signInNotice = ref(false)
-const loginRole = ref<Exclude<LocalRole, 'visitor'>>('user')
+function roleForNextPath(next: string): Exclude<LocalRole, 'visitor'> {
+  if (next.startsWith('/admin')) return 'admin'
+  if (next.startsWith('/creator')) return 'creator'
+  return 'user'
+}
+const loginRole = ref<Exclude<LocalRole, 'visitor'>>(
+  roleForNextPath(String(route.query.next ?? '')),
+)
 const activeImageIndex = ref(0)
 const localRating = ref(0)
 const ratingNotice = ref('')
@@ -124,6 +131,15 @@ const hasMoreCatalogWorks = computed(() => visibleCatalogWorks.value.length < ca
 const loadedCatalogProducts = computed(() =>
   category.value === 'all' || category.value === 'templates' ? catalog.value : [],
 )
+watch(
+  () => route.query.next,
+  (next) => {
+    if (props.path === '/login' && !signInNotice.value) {
+      loginRole.value = roleForNextPath(String(next ?? ''))
+    }
+  },
+)
+
 const section = computed(() =>
   props.path === '/library' || props.path.startsWith('/orders') ? 'library' : 'discover',
 )
@@ -275,12 +291,12 @@ function completeDemoPurchase() {
 }
 
 function signInWithDemoRole() {
+  const requested = String(route.query.next ?? '')
+  const next = requested.startsWith('/') && !requested.startsWith('//') ? requested : ''
+  const targetRole = roleForNextPath(next)
   saveLocalRole(loginRole.value)
   signInNotice.value = true
-  const next = String(route.query.next ?? '')
-  const canContinue =
-    (loginRole.value === 'creator' && next.startsWith('/creator')) ||
-    (loginRole.value === 'admin' && next.startsWith('/admin'))
+  const canContinue = Boolean(next) && targetRole === loginRole.value
   const destination = canContinue
     ? next
     : { user: '/library', creator: '/creator/works', admin: '/admin/reviews' }[loginRole.value]
@@ -835,6 +851,10 @@ function signInWithDemoRole() {
             </div>
             <button class="button button-primary" type="submit">进入演示</button>
           </form>
+          <p class="login-intent">
+            当前演示身份：<strong>{{ loginRole === 'creator' ? '创作者 / 店家' : loginRole === 'admin' ? '管理员' : '普通用户' }}</strong>
+            · 登录后会进入对应工作区
+          </p>
           <p v-if="signInNotice" class="inline-note" role="status">
             登录接口尚未接入，当前不会提交账户信息
           </p>
