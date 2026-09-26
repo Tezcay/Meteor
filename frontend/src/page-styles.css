@@ -1209,6 +1209,29 @@ button:not(:disabled):active,
 }
 .collection-main-image:hover .collection-expand,
 .collection-main-image:focus-visible .collection-expand { opacity: 1; transform: translateY(0); }
+.collection-viewer {
+  width: min(1120px, calc(100vw - 40px));
+  max-width: none;
+  max-height: calc(100vh - 40px);
+  padding: 0;
+  border: 0;
+  background: #1e211e;
+  color: #f6f5ef;
+}
+.collection-viewer::backdrop { background: rgb(23 25 22 / 76%); backdrop-filter: blur(6px); }
+.collection-viewer-shell { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; height: min(820px, calc(100vh - 40px)); }
+.collection-viewer header,
+.collection-viewer footer { display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 16px 20px; }
+.collection-viewer header { border-bottom: 1px solid rgb(255 255 255 / 16%); }
+.collection-viewer header p,
+.collection-viewer footer span { margin: 0; color: rgb(255 255 255 / 72%); font-size: 13px; }
+.collection-viewer header button,
+.collection-viewer footer button { display: grid; width: 36px; height: 36px; place-items: center; padding: 0; border: 1px solid rgb(255 255 255 / 24%); border-radius: 50%; color: inherit; font-size: 21px; transition: background 180ms ease, transform 180ms ease; }
+.collection-viewer header button:hover,
+.collection-viewer footer button:hover { background: rgb(255 255 255 / 12%); transform: scale(1.05); }
+.collection-viewer > .collection-viewer-shell > img { display: block; width: 100%; height: 100%; min-height: 0; object-fit: contain; }
+.collection-viewer footer { border-top: 1px solid rgb(255 255 255 / 16%); }
+.collection-viewer footer span { overflow: hidden; max-width: 70ch; text-align: center; text-overflow: ellipsis; white-space: nowrap; }
 .collection-thumbs {
   display: grid;
   grid-auto-rows: 78px;

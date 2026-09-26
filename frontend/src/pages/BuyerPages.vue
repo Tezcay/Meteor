@@ -51,6 +51,7 @@ const activeImageIndex = ref(0)
 const localRating = ref(0)
 const ratingNotice = ref('')
 const collectionSaved = ref(false)
+const collectionViewer = ref<HTMLDialogElement | null>(null)
 const localPurchases = ref(getLocalPurchases())
 const previewPurchase = {
   id: 'preview-order',
@@ -318,6 +319,19 @@ function selectCollectionImage(index: number) {
   activeImageIndex.value = (index + imageCount) % imageCount
 }
 
+function openCollectionViewer() {
+  if (!activeCollectionImage.value || collectionViewer.value?.open) return
+  collectionViewer.value?.showModal()
+}
+
+function closeCollectionViewer() {
+  collectionViewer.value?.close()
+}
+
+function closeCollectionViewerFromBackdrop(event: MouseEvent) {
+  if (event.target === collectionViewer.value) closeCollectionViewer()
+}
+
 function collectionLink(item: { category: string }) {
   const slug = collectionSlugFor(item as (typeof showcaseItems)[number])
   return slug ? `/collections/${slug}` : undefined
@@ -530,8 +544,8 @@ function signInWithDemoRole() {
           <button
             class="collection-main-image"
             type="button"
-            :aria-label="`切换至下一张图像：${activeCollectionImage?.alt}`"
-            @click="selectCollectionImage(activeImageIndex + 1)"
+            :aria-label="`放大查看图像：${activeCollectionImage?.alt}`"
+            @click="openCollectionViewer"
           >
             <img v-if="activeCollectionImage" :src="activeCollectionImage.src" :alt="activeCollectionImage.alt" />
             <span class="collection-expand" aria-hidden="true">↗</span>
@@ -560,7 +574,7 @@ function signInWithDemoRole() {
             <p>{{ collection.images.length }} 张图像 <span>{{ activeImageIndex + 1 }} / {{ collection.images.length }}</span></p>
             <div>
               <button type="button" aria-label="上一张图像" @click="selectCollectionImage(activeImageIndex - 1)">←</button>
-              <button type="button" aria-label="下一张图像" @click="selectCollectionImage(activeImageIndex + 1)">→</button>
+              <button type="button" aria-label="下一张图像" @click="openCollectionViewer">→</button>
             </div>
           </div>
           <button class="collection-save" type="button" :aria-pressed="collectionSaved" @click="collectionSaved = !collectionSaved">
@@ -583,8 +597,8 @@ function signInWithDemoRole() {
           <figure v-for="(image, index) in collection.images" :key="`sequence-${image.src}`" class="collection-sequence-item">
             <button
               type="button"
-              :aria-label="`在上方查看第 ${index + 1} 张：${image.alt}`"
-              @click="selectCollectionImage(index)"
+              :aria-label="`放大查看第 ${index + 1} 张：${image.alt}`"
+              @click="selectCollectionImage(index); openCollectionViewer()"
             >
               <img :src="image.src" :alt="image.alt" loading="lazy" />
               <span aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>
@@ -602,6 +616,25 @@ function signInWithDemoRole() {
           <a class="underlined-link" :href="`/discover?category=${collection.category}`">更多{{ collectionCategoryLabel }}作品</a>
         </nav>
       </section>
+      <dialog
+        ref="collectionViewer"
+        class="collection-viewer"
+        aria-labelledby="collection-viewer-title"
+        @click="closeCollectionViewerFromBackdrop"
+      >
+        <div class="collection-viewer-shell">
+          <header>
+            <p id="collection-viewer-title">{{ collection.title }} · {{ activeImageIndex + 1 }} / {{ collection.images.length }}</p>
+            <button type="button" aria-label="关闭图像查看器" @click="closeCollectionViewer">×</button>
+          </header>
+          <img v-if="activeCollectionImage" :src="activeCollectionImage.src" :alt="activeCollectionImage.alt" />
+          <footer>
+            <button type="button" aria-label="上一张图像" @click="selectCollectionImage(activeImageIndex - 1)">←</button>
+            <span>{{ activeCollectionImage?.alt }}</span>
+            <button type="button" aria-label="下一张图像" @click="selectCollectionImage(activeImageIndex + 1)">→</button>
+          </footer>
+        </div>
+      </dialog>
     </template>
 
     <template v-else-if="isProductPath">
