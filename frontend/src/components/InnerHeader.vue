@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { getLocalRole } from '../data/localStore'
 import BrandLogo from './BrandLogo.vue'
 import SearchDialog from './SearchDialog.vue'
@@ -7,21 +7,42 @@ import SearchDialog from './SearchDialog.vue'
 const props = defineProps<{ section?: string }>()
 const menuOpen = ref(false)
 const searchDialog = ref<InstanceType<typeof SearchDialog> | null>(null)
-const role = getLocalRole()
+const role = ref(getLocalRole())
 
-const isWorkspace = computed(() => props.section === 'creator' || props.section === 'admin')
-const workspaceTitle = computed(() => props.section === 'admin' ? '管理后台' : '创作中心')
-const workspaceDescription = computed(() => props.section === 'admin' ? '审核与售后' : '作品与订单')
-const accountLabel = computed(() => role === 'visitor' ? '登录' : '账户')
+const isWorkspace = computed(() => ['account', 'creator', 'admin'].includes(props.section ?? ''))
+const workspaceTitle = computed(() =>
+  props.section === 'admin' ? '管理后台' : props.section === 'creator' ? '创作中心' : '我的账户',
+)
+const workspaceDescription = computed(() =>
+  props.section === 'admin' ? '审核与售后' : props.section === 'creator' ? '作品与订单' : '已购内容与订单',
+)
+const accountLabel = computed(() => role.value === 'visitor' ? '登录' : '账户')
+const accountHref = computed(() => ({
+  visitor: '/login',
+  user: '/library',
+  creator: '/creator/works',
+  admin: '/admin/reviews',
+})[role.value])
+
+function syncRole() {
+  role.value = getLocalRole()
+}
 
 function openSearch() {
   searchDialog.value?.open('all', true)
 }
 
 onMounted(async () => {
+  window.addEventListener('meteor:role-change', syncRole)
+  window.addEventListener('storage', syncRole)
   if (new URLSearchParams(window.location.search).get('focus') !== 'search') return
   await nextTick()
   openSearch()
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('meteor:role-change', syncRole)
+  window.removeEventListener('storage', syncRole)
 })
 </script>
 
@@ -52,7 +73,7 @@ onMounted(async () => {
             </svg>
             <span>搜索</span>
           </button>
-          <a class="inner-account" href="/login">{{ accountLabel }}</a>
+          <a class="inner-account" :href="accountHref">{{ accountLabel }}</a>
         </template>
         <button
           class="inner-menu-button"
@@ -83,7 +104,7 @@ onMounted(async () => {
         <a href="/discover">发现</a>
         <a href="/library">内容库</a>
         <a href="/creator/works">创作者</a>
-        <a href="/login">{{ accountLabel }}</a>
+        <a :href="accountHref">{{ accountLabel }}</a>
       </template>
     </nav>
   </header>

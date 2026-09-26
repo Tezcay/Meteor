@@ -122,4 +122,5 @@ export function saveLocalRole(role: LocalRole) {
   const state = readState()
   state.role = role
   writeState(state)
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('meteor:role-change'))
 }

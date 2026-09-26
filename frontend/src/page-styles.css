@@ -1804,6 +1804,12 @@ button:not(:disabled):active,
 .library-page {
   padding-top: 82px;
 }
+.account-layout .library-page {
+  padding-top: 0;
+}
+.account-layout .workspace-heading {
+  margin-bottom: 28px;
+}
 .library-page .inner-hero-copy {
   margin-bottom: 55px;
 }
@@ -2932,8 +2938,12 @@ button:not(:disabled):active,
     display: flex;
     gap: 2px;
     overflow: auto;
+    scrollbar-width: none;
     margin-top: 16px;
     white-space: nowrap;
+  }
+  .workspace-sidebar nav::-webkit-scrollbar {
+    display: none;
   }
   .workspace-sidebar nav a {
     flex-shrink: 0;
