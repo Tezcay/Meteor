@@ -5,7 +5,7 @@ import AccountSidebar from '../components/AccountSidebar.vue'
 import InnerHeader from '../components/InnerHeader.vue'
 import { getProductDetail, getPublishedProducts } from '../api/products'
 import { categoryOptions, parseCategory, subcategoryLabel } from '../data/categories'
-import { getLocalPurchase, saveLocalPurchase, saveLocalRole } from '../data/localStore'
+import { getLocalPurchase, getLocalRole, saveLocalPurchase, saveLocalRole } from '../data/localStore'
 import type { LocalRole } from '../data/localStore'
 import {
   artworkCollections,
@@ -102,6 +102,32 @@ const packageOption = computed(
     displayProduct.value.packages.find((item) => item.id === selectedPackage.value) ??
     displayProduct.value.packages[0]!,
 )
+const selectedPackagePresentation = computed(() => {
+  const option = packageOption.value
+  if (!option) {
+    return {
+      items: ['交付文件与使用说明', '授权范围以正式发布信息为准'],
+      note: '作品信息会在购买前再次确认',
+    }
+  }
+  if (displayProduct.value.id === 1001 && option.name === 'Pro') {
+    return {
+      items: ['简历、求职信与完整作品集版式', '可编辑文本与图片替换页', '示例内容与使用说明'],
+      note: '适合需要一次整理完整求职材料的场景',
+    }
+  }
+  if (displayProduct.value.id === 1001) {
+    return {
+      items: ['简历与求职信基础版式', '可编辑文本与基础样式', '使用说明'],
+      note: '适合先从一套清晰的基础材料开始',
+    }
+  }
+  return {
+    items: ['作品文件与使用说明', '购买后可在内容库查看', '授权范围以正式发布信息为准'],
+    note: '具体内容以作品发布信息为准',
+  }
+})
+const checkoutRequiresSignIn = computed(() => getLocalRole() === 'visitor')
 const isDemoProduct = computed(() => !product.value)
 const featuredIllustrationTopics = computed(() => category.value === 'illustration' ? illustrationTopics : [])
 const featuredCollections = computed(() =>
@@ -237,6 +263,11 @@ watch(
   },
 )
 
+function packageOptionDescription(name: string) {
+  if (displayProduct.value.id !== 1001) return '查看交付内容与授权范围'
+  return name === 'Pro' ? '包含完整作品集版式' : '简历与求职信基础版式'
+}
+
 function selectProductPreview(index: number) {
   const count = productPreviewOptions.value.length
   if (!count) return
@@ -281,6 +312,10 @@ function loadMoreCatalogWorks() {
 
 function completeDemoPurchase() {
   if (!packageOption.value) return
+  if (checkoutRequiresSignIn.value) {
+    void router.push({ path: '/login', query: { next: route.fullPath } })
+    return
+  }
   localPurchase.value = saveLocalPurchase({
     productId: displayProduct.value.id,
     title: displayProduct.value.title,
@@ -617,16 +652,21 @@ function signInWithDemoRole() {
                 :aria-pressed="selectedPackage === option.id"
                 @click="selectedPackage = option.id"
               >
-                <strong>{{ option.name }}</strong
+                <span><strong>{{ option.name }}</strong><small>{{ packageOptionDescription(option.name) }}</small></span
                 ><b>{{ yuan(option.priceCents) }}</b>
               </button>
             </div>
+            <section v-if="displayProduct.packages.length" class="package-delivery" aria-live="polite">
+              <h3>{{ packageOption.name }} 包含</h3>
+              <ul><li v-for="item in selectedPackagePresentation.items" :key="item">{{ item }}</li></ul>
+              <p>{{ selectedPackagePresentation.note }}</p>
+            </section>
             <p class="product-terms">文件格式、授权与交付内容以正式发布信息为准</p>
             <a
               v-if="displayProduct.packages.length"
               class="button button-primary product-action"
               :href="`/checkout?product=${displayProduct.id}&package=${selectedPackage}`"
-              >查看购买信息 <span aria-hidden="true">↗</span></a
+              >继续购买</a
             >
             <p v-else class="inline-note">暂无可选套餐</p>
             <a v-if="displayProduct.id === 1001" class="shop-return" href="/shops/northstar"
@@ -686,7 +726,8 @@ function signInWithDemoRole() {
           </div>
           <aside class="checkout-summary">
             <span>本次金额</span><strong>{{ yuan(packageOption.priceCents) }}</strong>
-            <button class="button button-primary" type="button" @click="completeDemoPurchase">完成演示购买</button
+            <p v-if="checkoutRequiresSignIn" class="checkout-login-hint">登录后才能保存购买记录与访问授权。</p>
+            <button class="button button-primary" type="button" @click="completeDemoPurchase">{{ checkoutRequiresSignIn ? '登录后继续' : '完成演示购买' }}</button
             ><a href="/checkout/result">查看其他支付状态 ↗</a>
           </aside>
         </div>

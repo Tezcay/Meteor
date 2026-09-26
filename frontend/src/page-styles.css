@@ -1580,6 +1580,9 @@ button:not(:disabled):active,
 .package-picker strong {
   font-weight: 600;
 }
+.package-picker button > span {
+  min-width: 0;
+}
 .package-picker small {
   display: block;
   margin-top: 6px;
@@ -1590,6 +1593,40 @@ button:not(:disabled):active,
   font-size: 18px;
   font-weight: 550;
   white-space: nowrap;
+}
+.package-delivery {
+  margin-top: 18px;
+  padding: 18px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.package-delivery h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+.package-delivery ul {
+  display: grid;
+  gap: 8px;
+  margin: 13px 0 11px;
+  padding: 0;
+  list-style: none;
+}
+.package-delivery li {
+  color: #575c55;
+  font-size: 13px;
+}
+.package-delivery li::before {
+  content: '—';
+  margin-right: 8px;
+  color: var(--accent);
+}
+.package-delivery p,
+.checkout-login-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.75;
 }
 .product-terms {
   font-size: 13px;
