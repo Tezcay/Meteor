@@ -5,7 +5,7 @@ import AccountSidebar from '../components/AccountSidebar.vue'
 import InnerHeader from '../components/InnerHeader.vue'
 import { getProductDetail, getPublishedProducts } from '../api/products'
 import { categoryOptions, parseCategory, subcategoryLabel } from '../data/categories'
-import { getLocalPurchase, getLocalRole, saveLocalPurchase, saveLocalRole } from '../data/localStore'
+import { getLocalPurchases, getLocalRole, saveLocalPurchase, saveLocalRole } from '../data/localStore'
 import type { LocalRole } from '../data/localStore'
 import {
   artworkCollections,
@@ -51,7 +51,17 @@ const activeImageIndex = ref(0)
 const localRating = ref(0)
 const ratingNotice = ref('')
 const collectionSaved = ref(false)
-const localPurchase = ref(getLocalPurchase())
+const localPurchases = ref(getLocalPurchases())
+const previewPurchase = {
+  id: 'preview-order',
+  productId: 1001,
+  title: '求职材料模板包',
+  shopName: 'Northstar Design',
+  packageName: 'Basic',
+  purchasedAt: '2026-09-20T09:00:00.000Z',
+}
+const libraryEntries = computed(() => localPurchases.value.length ? localPurchases.value : showLibraryPreview.value ? [previewPurchase] : [])
+const orderEntries = computed(() => localPurchases.value.length ? localPurchases.value : showOrderPreview.value ? [previewPurchase] : [])
 let request: AbortController | null = null
 let catalogRequest: AbortController | null = null
 let searchTimer: ReturnType<typeof setTimeout> | null = null
@@ -251,7 +261,7 @@ watch(
     selectedPackage.value = Number(route.query.package ?? 2001)
     activeImageIndex.value = 0
     collectionSaved.value = false
-    localPurchase.value = getLocalPurchase()
+    localPurchases.value = getLocalPurchases()
     if (props.path === '/checkout/result' && route.query.demo === 'ready') resultState.value = 'ready'
     product.value = null
     productError.value = false
@@ -316,14 +326,19 @@ function completeDemoPurchase() {
     void router.push({ path: '/login', query: { next: route.fullPath } })
     return
   }
-  localPurchase.value = saveLocalPurchase({
+  saveLocalPurchase({
     productId: displayProduct.value.id,
     title: displayProduct.value.title,
     shopName: displayProduct.value.shopName,
     packageName: packageOption.value.name,
   })
+  localPurchases.value = getLocalPurchases()
   resultState.value = 'ready'
   void router.push({ path: '/checkout/result', query: { demo: 'ready' } })
+}
+
+function formatPurchaseDate(value: string) {
+  return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(value))
 }
 
 function signInWithDemoRole() {
@@ -806,34 +821,35 @@ function signInWithDemoRole() {
             <h1>内容库</h1>
             <p>已购作品与版本更新</p>
           </div>
-          <div v-if="!localPurchase" class="preview-ribbon">
+          <div v-if="!localPurchases.length" class="preview-ribbon">
             <span>账户与授权接口未接入，以下为状态示例</span
             ><button type="button" @click="showLibraryPreview = !showLibraryPreview">
-              {{ showLibraryPreview ? '查看真实空状态' : '预览已购状态' }} ↗
+              {{ showLibraryPreview ? '查看真实空状态' : '预览已购状态' }}
             </button>
           </div>
-          <div v-if="!showLibraryPreview && !localPurchase" class="empty-state library-empty">
+          <div v-if="!libraryEntries.length" class="empty-state library-empty">
             <div class="empty-mark">✳</div>
             <h2>暂无已购作品</h2>
             <p>购买后可在这里查看作品</p>
             <a class="button button-primary" href="/discover">去发现作品</a>
           </div>
-          <div v-else class="library-preview">
-            <div class="library-item-art">
-              <span>Northstar Design</span><strong>把经历<br />排成故事</strong>
-            </div>
-            <div class="library-item-copy">
-              <span class="demo-badge">{{ localPurchase ? '本机演示记录' : '状态示例 · 非真实购买' }}</span>
-              <h2>{{ localPurchase?.title ?? '求职材料模板包' }}</h2>
-              <p>{{ localPurchase?.packageName ?? 'Basic' }} 套餐 · 示例版本 v1.2</p>
-              <div class="library-status">
-                <span>有更新可查看</span><small>原有版本仍会保留</small>
+          <div v-else class="library-list">
+            <article v-for="purchase in libraryEntries" :key="purchase.id" class="library-preview">
+              <div class="library-item-art">
+                <span>{{ purchase.shopName }}</span><strong>{{ purchase.title }}</strong>
               </div>
-              <p class="muted">下载与文件访问需验证真实授权，当前不可用</p>
-              <button class="button button-secondary" type="button" disabled>
-                等待内容库接口接入</button
-              ><a href="/orders/demo">预览订单详情 ↗</a>
-            </div>
+              <div class="library-item-copy">
+                <span class="demo-badge">{{ purchase.id === 'preview-order' ? '状态示例 · 非真实购买' : '本机演示记录' }}</span>
+                <h2>{{ purchase.title }}</h2>
+                <p>{{ purchase.packageName }} 套餐 · 获得于 {{ formatPurchaseDate(purchase.purchasedAt) }}</p>
+                <div class="library-status">
+                  <span>已获得访问权限</span><small>版本更新将在这里显示</small>
+                </div>
+                <p class="muted">下载与文件访问需验证真实授权，当前不可用</p>
+                <button class="button button-secondary" type="button" disabled>等待内容库接口接入</button>
+                <a :href="`/orders/demo?order=${purchase.id}`">查看订单详情</a>
+              </div>
+            </article>
           </div>
         </div>
       </div>
@@ -844,33 +860,35 @@ function signInWithDemoRole() {
         <AccountSidebar active="orders" />
         <div class="workspace-content order-page">
           <div class="workspace-heading">
-            <h1>订单详情</h1>
+            <h1>订单记录</h1>
             <p>购买记录与授权状态</p>
           </div>
-          <div class="preview-ribbon">
-            <span>界面示例，未创建订单或文件权限</span
+          <div v-if="!localPurchases.length" class="preview-ribbon">
+            <span>订单接口未接入，以下为状态示例</span
             ><button type="button" @click="showOrderPreview = !showOrderPreview">
-              {{ showOrderPreview ? '收起示例' : '查看订单示例' }} ↗
+              {{ showOrderPreview ? '查看真实空状态' : '预览订单示例' }}
             </button>
           </div>
-          <div v-if="showOrderPreview" class="order-sheet">
-            <div><span>示例订单</span><strong>已完成 · 可查看作品</strong></div>
-            <div><span>作品</span><strong>求职材料模板包 / Basic</strong></div>
-            <div><span>订单来源</span><strong>单次购买</strong></div>
-            <div><span>退款</span><strong>申请与处理接口尚未接入</strong></div>
-            <p>若正式订单退款成功，仅撤销该订单产生的访问权限，其他合法来源的权限不受影响</p>
-          </div>
-          <div v-else class="empty-state">
+          <div v-if="!orderEntries.length" class="empty-state">
             <h2>暂无订单</h2>
             <p>购买后可在这里查看状态</p>
             <a class="button button-secondary" href="/discover">继续探索</a>
           </div>
+          <section v-else class="order-list" aria-label="购买订单列表">
+            <article v-for="purchase in orderEntries" :key="purchase.id" class="order-sheet">
+              <div><span>订单编号</span><strong>#{{ purchase.id.slice(-6) }}</strong></div>
+              <div><span>作品</span><strong>{{ purchase.title }}</strong></div>
+              <div><span>套餐</span><strong>{{ purchase.packageName }}</strong></div>
+              <div><span>购买时间</span><strong>{{ formatPurchaseDate(purchase.purchasedAt) }}</strong></div>
+              <div><span>访问状态</span><strong>已获得授权</strong></div>
+              <p>{{ purchase.id === 'preview-order' ? '这是演示状态，不会创建真实订单或访问权限。' : '下载权限与退款状态将在接入真实订单和授权接口后更新。' }}</p>
+            </article>
+          </section>
         </div>
       </div>
     </template>
 
-    <template v-else-if="path === '/login'">
-      <div class="page-width login-layout">
+    <template v-else-if="path === '/login'">      <div class="page-width login-layout">
         <div class="login-art">
           <img src="/images/creator-studio-1280.webp" alt="阳光下摆着纸张与色卡的创作桌面" />
         </div>

@@ -1874,11 +1874,20 @@ button:not(:disabled):active,
   background: #eeeee8;
   border: 0;
 }
+.library-list {
+  display: grid;
+  gap: 16px;
+  margin-top: 33px;
+}
 .library-preview {
   display: grid;
   grid-template-columns: minmax(0, 0.8fr) minmax(300px, 1fr);
-  margin-top: 33px;
   background: #eff0e9;
+}
+.library-item-art strong,
+.library-item-copy h2,
+.order-sheet strong {
+  overflow-wrap: anywhere;
 }
 .library-item-art {
   min-height: 320px;
@@ -1934,9 +1943,13 @@ button:not(:disabled):active,
   color: var(--accent);
   margin-top: 17px;
 }
+.order-list {
+  display: grid;
+  gap: 16px;
+  margin-top: 30px;
+}
 .order-sheet {
   padding: 28px 37px;
-  margin-top: 32px;
   background: #efefe9;
 }
 .order-sheet > div {

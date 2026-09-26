@@ -21,6 +21,7 @@ export type LocalWork = {
 }
 
 export type LocalPurchase = {
+  id: string
   productId: number
   title: string
   shopName: string
@@ -33,26 +34,40 @@ export type LocalRole = 'visitor' | 'user' | 'creator' | 'admin'
 type LocalState = {
   profile: CreatorProfile | null
   works: LocalWork[]
-  purchase: LocalPurchase | null
+  purchases: LocalPurchase[]
   role: LocalRole
 }
+type PersistedState = Partial<LocalState> & {
+  purchase?: Omit<LocalPurchase, 'id'> | null
+}
+
 const storageKey = 'meteor.local-demo.v1'
 
 function readState(): LocalState {
   try {
     const value = localStorage.getItem(storageKey)
-    if (!value) return { profile: null, works: [], purchase: null, role: 'visitor' }
-    const parsed = JSON.parse(value) as Partial<LocalState>
+    if (!value) return { profile: null, works: [], purchases: [], role: 'visitor' }
+    const parsed = JSON.parse(value) as PersistedState
+    const legacyPurchase = parsed.purchase?.productId
+      ? { ...parsed.purchase, id: `legacy-${parsed.purchase.productId}` }
+      : null
+    const purchases = Array.isArray(parsed.purchases)
+      ? parsed.purchases
+          .filter((purchase): purchase is LocalPurchase => Boolean(purchase?.productId))
+          .map((purchase, index) => ({ ...purchase, id: purchase.id || `legacy-list-${purchase.productId}-${index}` }))
+      : legacyPurchase
+        ? [legacyPurchase]
+        : []
     return {
       profile: parsed.profile?.displayName ? (parsed.profile as CreatorProfile) : null,
       works: Array.isArray(parsed.works) ? (parsed.works as LocalWork[]) : [],
-      purchase: parsed.purchase?.productId ? (parsed.purchase as LocalPurchase) : null,
+      purchases,
       role: ['visitor', 'user', 'creator', 'admin'].includes(String(parsed.role))
         ? (parsed.role as LocalRole)
         : 'visitor',
     }
   } catch {
-    return { profile: null, works: [], purchase: null, role: 'visitor' }
+    return { profile: null, works: [], purchases: [], role: 'visitor' }
   }
 }
 
@@ -102,15 +117,24 @@ export function updateLocalWorkStatus(id: string, status: LocalWorkStatus) {
   return updated
 }
 
-export function getLocalPurchase() {
-  return readState().purchase
+export function getLocalPurchases() {
+  return readState().purchases
 }
 
-export function saveLocalPurchase(purchase: Omit<LocalPurchase, 'purchasedAt'>) {
+export function getLocalPurchase() {
+  return getLocalPurchases()[0] ?? null
+}
+
+export function saveLocalPurchase(purchase: Omit<LocalPurchase, 'id' | 'purchasedAt'>) {
   const state = readState()
-  const nextPurchase: LocalPurchase = { ...purchase, purchasedAt: new Date().toISOString() }
-  state.purchase = nextPurchase
+  const nextPurchase: LocalPurchase = {
+    ...purchase,
+    id: `order-${Date.now()}`,
+    purchasedAt: new Date().toISOString(),
+  }
+  state.purchases = [nextPurchase, ...state.purchases]
   writeState(state)
+  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('meteor:purchases-change'))
   return nextPurchase
 }
 
