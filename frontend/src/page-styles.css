@@ -1849,7 +1849,13 @@ button:not(:disabled):active,
   padding-top: 0;
 }
 .account-layout .workspace-heading {
-  margin-bottom: 28px;
+  margin: 0 0 28px;
+}
+.account-layout .workspace-heading h1 {
+  font-size: clamp(32px, 3vw, 42px);
+}
+.account-layout .workspace-heading p {
+  font-size: 14px;
 }
 .library-page .inner-hero-copy {
   margin-bottom: 55px;
@@ -1860,7 +1866,7 @@ button:not(:disabled):active,
   align-items: center;
   gap: 20px;
   padding: 17px 22px;
-  border-left: 2px solid var(--accent);
+  border: 1px solid #dfd2d7;
   background: #f0e9ed;
   color: #5c4c55;
   font-size: 13px;
@@ -1874,7 +1880,8 @@ button:not(:disabled):active,
   white-space: nowrap;
 }
 .library-empty {
-  margin-top: 35px;
+  margin-top: 24px;
+  padding-block: clamp(48px, 5vw, 64px);
   background: #eeeee8;
   border: 0;
 }
@@ -1981,7 +1988,8 @@ button:not(:disabled):active,
   line-height: 1.8;
 }
 .order-page > .empty-state {
-  margin-top: 32px;
+  margin-top: 24px;
+  padding-block: clamp(48px, 5vw, 64px);
 }
 .login-layout {
   display: grid;
