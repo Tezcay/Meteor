@@ -39,7 +39,7 @@ const filteredReviews = computed(() =>
 </script>
 
 <template>
-  <InnerHeader />
+  <InnerHeader section="admin" />
   <main id="page-main" class="inner-main page-width workspace-layout admin-layout" tabindex="-1">
     <aside class="workspace-sidebar">
       <div class="workspace-sidebar-title"><span>运营工作台</span></div>
