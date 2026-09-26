@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import InnerHeader from '../components/InnerHeader.vue'
 import { categoryTaxonomy, categories } from '../data/categories'
-import { getLocalProfile, getLocalWorks, saveLocalProfile, saveLocalWork, type LocalWork } from '../data/localStore'
+import { getLocalProfile, getLocalWorks, saveLocalProfile, saveLocalWork, updateLocalWorkStatus, type LocalWork } from '../data/localStore'
 import type { DiscoveryCategory } from '../types/discovery'
 
 const props = defineProps<{ path: string }>()
@@ -33,11 +33,24 @@ const previewImages = ref<Array<{ id: number; name: string; url: string }>>([])
 const restoredPreviewNames = ref<string[]>([])
 const editorNotice = ref('')
 const reviewTab = ref<'draft' | 'review' | 'published' | 'rejected'>('review')
+const reviewNotice = ref('')
 const localWorks = ref<LocalWork[]>(getLocalWorks())
 
 watch(workCategory, (category) => {
   workSubcategory.value = categoryTaxonomy[category][0]?.value ?? ''
 })
+
+const statusLabels: Record<LocalWork['status'], string> = {
+  draft: '草稿',
+  review: '审核中',
+  published: '已上架',
+  rejected: '需修改',
+}
+const reviewWorkId = ref('')
+const reviewWork = computed(() =>
+  localWorks.value.find((work) => work.id === reviewWorkId.value) ?? localWorks.value[0],
+)
+const workCount = computed(() => localWorks.value.length)
 
 const workTags = computed(() =>
   tagInput.value
@@ -46,6 +59,37 @@ const workTags = computed(() =>
     .filter(Boolean)
     .slice(0, 8),
 )
+watch(reviewWork, (work) => {
+  if (work) {
+    if (!reviewWorkId.value) reviewWorkId.value = work.id
+    reviewTab.value = work.status
+  }
+}, { immediate: true })
+
+function statusLabel(status: LocalWork['status']) {
+  return statusLabels[status]
+}
+function categoryLabel(value: string) {
+  return categories.find((item) => item.value === value)?.label ?? value
+}
+function formatWorkDate(value: string) {
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? '刚刚更新' : new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(date)
+}
+function selectReviewWork(id: string) {
+  reviewWorkId.value = id
+  const work = localWorks.value.find((item) => item.id === id)
+  if (work) reviewTab.value = work.status
+}
+function setReviewStatus(status: LocalWork['status']) {
+  reviewTab.value = status
+  const work = reviewWork.value
+  if (!work) return
+  updateLocalWorkStatus(work.id, status)
+  localWorks.value = getLocalWorks()
+  reviewNotice.value = `已将「${work.title}」标记为${statusLabel(status)}`
+}
+
 const previewCover = computed(() => previewImages.value[0])
 const previewImageNames = computed(() =>
   previewImages.value.length ? previewImages.value.map((item) => item.name) : restoredPreviewNames.value,
@@ -224,6 +268,36 @@ function saveOnboarding() {
             <a class="underlined-link" href="/creator/review">查看审核状态 ↗</a>
           </div>
         </div>
+        <section v-if="localWorks.length" class="creator-work-list" aria-labelledby="creator-work-list-title">
+          <div class="creator-work-list-head">
+            <div>
+              <h2 id="creator-work-list-title">已保存作品</h2>
+              <p>草稿、审核中的版本都会在这里继续接上</p>
+            </div>
+            <span>{{ workCount }} 件</span>
+          </div>
+          <div class="creator-work-grid">
+            <article v-for="work in localWorks" :key="work.id" class="creator-work-card">
+              <div class="creator-work-card-head">
+                <span :class="`work-status work-status-${work.status}`">{{ statusLabel(work.status) }}</span>
+                <small>{{ formatWorkDate(work.updatedAt) }}</small>
+              </div>
+              <h3>{{ work.title }}</h3>
+              <p>{{ work.summary || '尚未填写作品简介' }}</p>
+              <div class="creator-work-card-meta">
+                <span>{{ categoryLabel(work.category) }} · {{ work.subcategory }}</span>
+                <span>{{ work.previewImages?.length ?? 0 }} 张预览 · {{ work.files.length }} 个文件</span>
+              </div>
+              <div v-if="work.tags.length" class="creator-work-card-tags">
+                <span v-for="tag in work.tags.slice(0, 3)" :key="tag">{{ tag }}</span>
+              </div>
+              <div class="creator-work-card-actions">
+                <a v-if="work.status === 'draft' || work.status === 'rejected'" href="/creator/releases/new">继续编辑 ↗</a>
+                <a v-else href="/creator/review">查看状态 ↗</a>
+              </div>
+            </article>
+          </div>
+        </section>
         <div class="works-next">
           <div>
             <h2>新建作品</h2>
@@ -405,16 +479,31 @@ function saveOnboarding() {
             :key="item.value"
             type="button"
             :aria-pressed="reviewTab === item.value"
-            @click="reviewTab = item.value as 'draft' | 'review' | 'published' | 'rejected'"
+            @click="setReviewStatus(item.value as 'draft' | 'review' | 'published' | 'rejected')"
           >
             {{ item.label }}
           </button>
+        </div>
+        <p v-if="reviewNotice" class="inline-note" role="status">{{ reviewNotice }}</p>
+        <div v-if="localWorks.length" class="review-work-picker" aria-label="选择审核作品">
+          <span>正在查看</span>
+          <div>
+            <button
+              v-for="work in localWorks"
+              :key="work.id"
+              type="button"
+              :aria-pressed="reviewWork?.id === work.id"
+              @click="selectReviewWork(work.id)"
+            >
+              {{ work.title }} · {{ statusLabel(work.status) }}
+            </button>
+          </div>
         </div>
         <div class="review-stage">
           <span class="demo-badge">状态示例</span>
           <div class="review-stage-top">
             <div>
-              <span>求职材料模板包 · 候选版本 v1.3</span>
+              <span>{{ reviewWork ? `${reviewWork.title} · ${reviewWork.version}` : '求职材料模板包 · 候选版本 v1.3' }}</span>
               <h2>
                 {{
                   {
@@ -428,7 +517,7 @@ function saveOnboarding() {
               <p>
                 {{
                   {
-                    draft: '介绍、预览和交付文件都可以继续编辑',
+                    draft: reviewWork?.summary || '介绍、预览和交付文件都可以继续编辑',
                     review: '旧版本仍可被已购买的用户使用，新版本审核完成后再发布',
                     published: '购买此套餐的用户可在内容库查看更新',
                     rejected: '根据审核意见修改后，可以重新提交',

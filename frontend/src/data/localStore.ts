@@ -90,6 +90,18 @@ export function saveLocalWork(
   return work
 }
 
+export function updateLocalWorkStatus(id: string, status: LocalWorkStatus) {
+  const state = readState()
+  const index = state.works.findIndex((work) => work.id === id)
+  if (index < 0) return null
+  const work = state.works[index]
+  if (!work) return null
+  const updated = { ...work, status, updatedAt: new Date().toISOString() }
+  state.works[index] = updated
+  writeState(state)
+  return updated
+}
+
 export function getLocalPurchase() {
   return readState().purchase
 }
