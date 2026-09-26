@@ -2175,6 +2175,19 @@ button:not(:disabled):active,
   font-size: 13px;
   margin-top: 20px;
 }
+.release-preview { margin: -4px 0 24px; padding-bottom: 23px; border-bottom: 1px solid color-mix(in srgb, var(--ink) 14%, transparent); }
+.release-preview-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 12px; color: var(--muted); font-size: 12px; }
+.release-preview-head small { font-size: 11px; }
+.release-preview-cover { display: grid; aspect-ratio: 1.25 / 1; place-items: center; overflow: hidden; background: #d7ded3; color: #4f6359; text-align: center; }
+.release-preview-cover img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.release-preview-cover span { font-size: 12px; line-height: 1.65; }
+.release-preview h2 { margin: 15px 0 6px; font-size: 21px; font-weight: 600; line-height: 1.2; }
+.release-preview p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.release-preview-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 13px; }
+.release-preview-tags span { padding: 4px 7px; border: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+.preview-restored { display: grid; gap: 5px; margin: 16px 0 0 48px; padding: 12px 14px; background: #f4f0f1; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.preview-restored strong { color: var(--ink); font-size: 13px; }
+.preview-restored ul { display: grid; gap: 3px; margin: 3px 0 0; padding-left: 16px; }
 .review-stage {
   padding: 42px;
   background: #edeee8;
@@ -2860,7 +2873,8 @@ button:not(:disabled):active,
   .editor-section .editor-form,
   .file-drop,
   .local-files,
-  .preview-queue {
+  .preview-queue,
+  .preview-restored {
     margin-left: 0;
   }
   .editor-two-columns {

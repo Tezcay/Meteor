@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import InnerHeader from '../components/InnerHeader.vue'
 import { categoryTaxonomy, categories } from '../data/categories'
 import { getLocalProfile, getLocalWorks, saveLocalProfile, saveLocalWork, type LocalWork } from '../data/localStore'
@@ -30,6 +30,7 @@ const workSubcategory = ref('work')
 const tagInput = ref('')
 const localFileNames = ref<string[]>([])
 const previewImages = ref<Array<{ id: number; name: string; url: string }>>([])
+const restoredPreviewNames = ref<string[]>([])
 const editorNotice = ref('')
 const reviewTab = ref<'draft' | 'review' | 'published' | 'rejected'>('review')
 const localWorks = ref<LocalWork[]>(getLocalWorks())
@@ -45,15 +46,40 @@ const workTags = computed(() =>
     .filter(Boolean)
     .slice(0, 8),
 )
+const previewCover = computed(() => previewImages.value[0])
+const previewImageNames = computed(() =>
+  previewImages.value.length ? previewImages.value.map((item) => item.name) : restoredPreviewNames.value,
+)
+
+function restoreDraft() {
+  const draft = localWorks.value.find((item) => item.status === 'draft')
+  if (!draft) return
+  editorTitle.value = draft.title
+  editorSummary.value = draft.summary
+  versionLabel.value = draft.version
+  packageName.value = draft.packageName
+  workCategory.value = draft.category as Exclude<DiscoveryCategory, 'all'>
+  workSubcategory.value = draft.subcategory
+  tagInput.value = draft.tags.join('，')
+  localFileNames.value = [...draft.files]
+  restoredPreviewNames.value = [...(draft.previewImages ?? [])]
+  editorNotice.value = '已恢复最近一次草稿；如需生成图片预览，请重新选择预览图'
+}
+
+onMounted(() => {
+  if (active.value === 'release') restoreDraft()
+})
 
 function addLocalFiles(event: Event) {
   const input = event.target as HTMLInputElement
   localFileNames.value = Array.from(input.files ?? []).map((file) => file.name)
   editorNotice.value = localFileNames.value.length ? '文件仅显示在当前浏览器中，尚未上传' : ''
-}function addPreviewImages(event: Event) {
+}
+function addPreviewImages(event: Event) {
   const input = event.target as HTMLInputElement
   const selected = Array.from(input.files ?? []).filter((file) => file.type.startsWith('image/'))
   previewImages.value.forEach((item) => URL.revokeObjectURL(item.url))
+  restoredPreviewNames.value = []
   previewImages.value = selected.map((file, index) => ({ id: Date.now() + index, name: file.name, url: URL.createObjectURL(file) }))
   editorNotice.value = previewImages.value.length ? '预览图已加入队列，第一张将作为封面' : '请选择 JPG、PNG 或 WEBP 图片'
   input.value = ''
@@ -81,7 +107,7 @@ function savePreview() {
     version: versionLabel.value.trim() || 'v1.0',
     packageName: packageName.value.trim() || 'Basic',
     files: localFileNames.value,
-    previewImages: previewImages.value.map((item) => item.name),
+    previewImages: previewImageNames.value,
     category: workCategory.value,
     subcategory: workSubcategory.value,
     tags: workTags.value,
@@ -102,7 +128,7 @@ function submitForReview() {
       version: versionLabel.value.trim() || 'v1.0',
       packageName: packageName.value.trim() || 'Basic',
       files: localFileNames.value,
-      previewImages: previewImages.value.map((item) => item.name),
+      previewImages: previewImageNames.value,
       category: workCategory.value,
       subcategory: workSubcategory.value,
       tags: workTags.value,
@@ -310,6 +336,11 @@ function saveOnboarding() {
                   </div>
                 </article>
               </div>
+              <div v-if="!previewImages.length && restoredPreviewNames.length" class="preview-restored">
+                <strong>草稿中的预览图</strong>
+                <span>文件仍在草稿记录中，重新选择后可恢复视觉预览</span>
+                <ul><li v-for="name in restoredPreviewNames" :key="name">{{ name }}</li></ul>
+              </div>
             </section>
             <section class="editor-section">
               <div class="editor-section-title">
@@ -336,6 +367,16 @@ function saveOnboarding() {
             <p v-if="editorNotice" class="inline-note" role="status">{{ editorNotice }}</p>
           </div>
           <aside class="release-aside">
+            <section class="release-preview" aria-label="发布前预览">
+              <div class="release-preview-head"><span>实时预览</span><small>{{ previewImageNames.length }} 张预览图</small></div>
+              <div class="release-preview-cover">
+                <img v-if="previewCover" :src="previewCover.url" alt="作品封面预览" />
+                <span v-else>上传预览图后<br />这里会显示封面</span>
+              </div>
+              <h2>{{ editorTitle.trim() || '未命名作品' }}</h2>
+              <p>{{ editorSummary.trim() || '一句话介绍会显示在这里' }}</p>
+              <div v-if="workTags.length" class="release-preview-tags"><span v-for="tag in workTags" :key="tag">{{ tag }}</span></div>
+            </section>
             <h2>发布前检查</h2>
             <ul class="check-list">
               <li>公开预览中不包含交付文件地址</li>
