@@ -10,12 +10,9 @@ const searchDialog = ref<InstanceType<typeof SearchDialog> | null>(null)
 const role = getLocalRole()
 
 const isWorkspace = computed(() => props.section === 'creator' || props.section === 'admin')
-const workspaceTitle = computed(() => props.section === 'admin' ? '运营中心' : '创作中心')
-const workspaceDescription = computed(() => props.section === 'admin' ? '平台管理工作台' : '作品与小店工作台')
-const workspaceHref = computed(() => role === 'admin' ? '/admin/reviews' : '/creator/works')
-const workspaceEntryLabel = computed(() => role === 'admin' ? '运营中心' : '创作中心')
-const accountHref = computed(() => role === 'visitor' ? '/login' : '/library')
-const accountLabel = computed(() => role === 'visitor' ? '登录' : '内容库')
+const workspaceTitle = computed(() => props.section === 'admin' ? '管理后台' : '创作中心')
+const workspaceDescription = computed(() => props.section === 'admin' ? '审核与售后' : '作品与订单')
+const accountLabel = computed(() => role === 'visitor' ? '登录' : '账户')
 
 function openSearch() {
   searchDialog.value?.open('all', true)
@@ -39,8 +36,8 @@ onMounted(async () => {
       </div>
       <nav v-else class="inner-nav" aria-label="站点导航">
         <a href="/discover" :aria-current="section === 'discover' ? 'page' : undefined">发现</a>
-        <a href="/discover#collection-index-title">专题</a>
-        <a href="/discover#catalog-title">全部作品</a>
+        <a href="/library" :aria-current="section === 'library' ? 'page' : undefined">内容库</a>
+        <a href="/creator/works">创作者</a>
       </nav>
       <div class="inner-actions">
         <template v-if="isWorkspace">
@@ -55,8 +52,7 @@ onMounted(async () => {
             </svg>
             <span>搜索</span>
           </button>
-          <a class="inner-account" :href="accountHref">{{ accountLabel }}</a>
-          <a class="workspace-entry" :href="workspaceHref">{{ workspaceEntryLabel }}</a>
+          <a class="inner-account" href="/login">{{ accountLabel }}</a>
         </template>
         <button
           class="inner-menu-button"
@@ -85,12 +81,9 @@ onMounted(async () => {
       </template>
       <template v-else>
         <a href="/discover">发现</a>
-        <a href="/discover#collection-index-title">专题</a>
-        <a href="/discover#catalog-title">全部作品</a>
-        <a v-if="role !== 'visitor'" href="/library">内容库</a>
-        <a :href="workspaceHref">{{ workspaceEntryLabel }}</a>
-        <a v-if="role === 'visitor'" href="/login">登录</a>
-        <a v-else href="/login">切换身份</a>
+        <a href="/library">内容库</a>
+        <a href="/creator/works">创作者</a>
+        <a href="/login">{{ accountLabel }}</a>
       </template>
     </nav>
   </header>

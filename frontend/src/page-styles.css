@@ -110,20 +110,6 @@ button:disabled {
   color: var(--muted);
   font-size: 11px;
 }
-.inner-actions .workspace-entry {
-  padding: 10px 14px;
-  border: 1px solid var(--ink);
-  background: var(--ink);
-  color: var(--paper);
-}
-.inner-actions .workspace-entry:hover {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: #fff;
-}
-.inner-actions .workspace-entry::after {
-  display: none;
-}
 .workspace-return {
   color: var(--ink) !important;
 }
@@ -2828,7 +2814,6 @@ button:not(:disabled):active,
   }
   .inner-nav,
   .inner-account,
-  .workspace-entry,
   .inner-header-workspace .workspace-return,
   .inner-search span {
     display: none;
