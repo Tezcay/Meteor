@@ -1,6 +1,6 @@
 # Meteor Backend：M1 公开商品读取
 
-当前实现公开商品列表、关键词搜索和详情读取。Spring Boot 通过 MyBatis 从 MySQL 查询已发布商品与套餐。登录、交易、Redis 和文件交付尚未实现。
+当前实现公开商品列表、关键词搜索和详情读取。Spring Boot 通过 MyBatis 从 MySQL 查询已发布商品 Revision 与套餐。数据库已使用 Flyway 管理迁移，并建立用户角色、店铺归属、商品 Revision 和分层分类的基础结构；登录、交易、Redis 和文件交付尚未实现。
 
 ## 代码地图
 
@@ -11,7 +11,7 @@ Vue 前端 frontend/（Vite 开发服务器）
   → ProductController
   → ProductQueryService
   → ProductMapper + ProductMapper.xml
-  → MySQL products / shops / packages
+  → MySQL products / product_revisions / shops / packages
 ```
 
 顶层 `product` 是商品业务模块。以后会并列增加 `order`、`payment`、`entitlement`、`delivery`；每个模块内部再使用熟悉的 `controller`、`service`、`mapper`、`dto`。这样既能按业务聚合，又不会把整个项目的所有 Controller、Service、Mapper 混在巨大的同名目录中。
@@ -21,16 +21,18 @@ Vue 前端 frontend/（Vite 开发服务器）
 1. `ProductController.java`：HTTP 请求从哪里进入。
 2. `ProductQueryService.java`：参数检查、未找到处理和查询结果到 API DTO 的转换。
 3. `ProductMapper.xml`：真正执行的两条 SQL。
-4. `schema.sql`：主键、外键、唯一约束与索引。
+4. `db/migration/`：按版本演进的表结构、数据迁移、约束与索引。
 5. `../frontend/src/api/products.ts`：前端如何调用接口并处理失败。
 
 `ProductDetailResponse` 是返回给浏览器的 DTO。`ProductSummaryProjection`、`PackageOptionProjection` 是 SQL 查询列的投影，因为它们来自 JOIN 或部分字段，并不是数据库表的完整 Entity。三者使用 Java record 表达不可变数据载体；record 会自动生成构造器、字段访问方法、`equals`、`hashCode` 和 `toString`。
 
 列表接口最多返回 24 件已发布商品，按创建时间与 ID 倒序排列。`q` 可搜索商品标题、简介和店铺名称，最多 100 个字符；`%`、`_`、`!` 作为普通字符匹配。分类尚未进入商品表，前端目前只把种子商品归为“模板”，其他分类继续展示不参与购买的灵感素材。
 
-## 为什么暂时使用 schema.sql
+## 数据库迁移
 
-M1 先用 Spring Boot SQL 初始化器建立最小结构，减少环境搭建阻塞。进入持续演进前会迁移到 Flyway，并停止修改已经应用的迁移文件。当前做法是阶段选择，不代表生产项目应在每次启动执行任意 DDL。
+数据库结构由 Flyway 管理。`V1` 保留最初的商品读取基线，`V2` 将已有本地数据迁移到用户／角色、店铺归属、商品 Revision 和 `taxonomy_terms` 结构。已经应用的迁移文件不得修改；后续变化必须新增 `V3`、`V4` 等迁移。
+
+为了接管早期没有 Flyway 历史表的本地 `meteor` 数据库，当前开发配置启用 `baseline-on-migrate` 并将基线版本设为 1。部署到全新或正式环境时应显式设置 `METEOR_FLYWAY_BASELINE_ON_MIGRATE=false`，避免错误接管未知数据库。
 
 ## 本地建库
 

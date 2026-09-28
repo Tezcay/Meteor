@@ -7,23 +7,28 @@
     <select id="findPublishedProducts" resultType="dev.meteor.product.mapper.projection.ProductSummaryProjection">
         SELECT p.id,
                s.name AS shop_name,
-               p.title,
-               p.summary
+               pr.title,
+               pr.summary
         FROM products p
         JOIN shops s ON s.id = p.shop_id
-        WHERE p.status = 'PUBLISHED'
+        JOIN product_revisions pr ON pr.id = p.current_published_revision_id
+        WHERE p.sale_status = 'ON_SALE'
+          AND pr.status = 'PUBLISHED'
+          AND s.status = 'ACTIVE'
           AND (
               #{categorySlug} IS NULL
               OR EXISTS (
                   SELECT 1
-                  FROM product_categories pc
-                  WHERE pc.product_id = p.id
-                    AND pc.category_slug = #{categorySlug}
+                  FROM product_revision_taxonomy_terms prt
+                  JOIN taxonomy_terms tt ON tt.id = prt.taxonomy_term_id
+                  WHERE prt.product_revision_id = pr.id
+                    AND tt.slug = #{categorySlug}
+                    AND tt.status = 'ACTIVE'
               )
           )
           AND (
-              p.title LIKE #{searchPattern} ESCAPE '!'
-              OR p.summary LIKE #{searchPattern} ESCAPE '!'
+              pr.title LIKE #{searchPattern} ESCAPE '!'
+              OR pr.summary LIKE #{searchPattern} ESCAPE '!'
               OR s.name LIKE #{searchPattern} ESCAPE '!'
           )
         ORDER BY p.created_at DESC, p.id DESC
@@ -33,12 +38,15 @@
     <select id="findPublishedProduct" resultType="dev.meteor.product.mapper.projection.ProductSummaryProjection">
         SELECT p.id,
                s.name AS shop_name,
-               p.title,
-               p.summary
+               pr.title,
+               pr.summary
         FROM products p
         JOIN shops s ON s.id = p.shop_id
+        JOIN product_revisions pr ON pr.id = p.current_published_revision_id
         WHERE p.id = #{productId}
-          AND p.status = 'PUBLISHED'
+          AND p.sale_status = 'ON_SALE'
+          AND pr.status = 'PUBLISHED'
+          AND s.status = 'ACTIVE'
     </select>
 
     <select id="findSalePackages" resultType="dev.meteor.product.mapper.projection.PackageOptionProjection">
