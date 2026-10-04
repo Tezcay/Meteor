@@ -44,13 +44,13 @@ flowchart LR
 | 订单 | 已完成服务端核价、快照、用户级幂等与并发冲突恢复 | Service 单元测试、HTTP 契约测试、真实 MySQL 阶段验收 |
 | 支付 | 已完成默认关闭的本地测试适配器 | 10 项 Service 测试、7 项 Web 契约测试；不是真实支付 |
 | 权益 | 已完成事务内幂等 Grant、历史回填、内容库与订单查询 | 重放不重复授权、跨账号隐藏资源 |
-| 版本交付 | 已完成 Release、冻结 Manifest 和 Classpath 文件元数据 | Flyway V9～V10、SHA-256／字节数核对 |
+| 版本交付 | 已完成 Release、冻结 Manifest 和 Classpath 文件元数据 | 9 项 Service 测试、9 项 HTTP 授权契约、Flyway V9～V10 |
 | 下载 | 已完成本地小文件最小闭环 | 五分钟一次性票据、二次授权、重复消费 404、V12 |
 | 无障碍 | 核心路由完成一轮自动扫描和关键人工检查 | 11 路由 axe 0 违规、键盘、320px、减少动画 |
 | 数据库集成测试 | 代码已接入，真实容器运行待完成 | 2 项被 Maven 发现；Docker 不可用时跳过 |
 | 可重复验证 | 本地一键门禁已完成，托管 CI 未做 | Maven Wrapper、前端格式／构建、链接和空白检查 |
 
-当前自动化结果是：后端 72 项被发现，70 项非容器测试执行通过，2 项 Testcontainers 因 Docker 不可用而跳过；前端 Prettier、TypeScript 和生产构建通过。`scripts/verify.ps1 -RequireContainers` 会把容器测试跳过判为失败，因此当前不能在简历中写“Testcontainers 已跑通”。
+当前自动化结果是：后端 81 项被发现，79 项非容器测试执行通过，2 项 Testcontainers 因 Docker 不可用而跳过；前端 Prettier、TypeScript 和生产构建通过。`scripts/verify.ps1 -RequireContainers` 会把容器测试跳过判为失败，因此当前不能在简历中写“Testcontainers 已跑通”。
 
 ## 七节学习主线
 
