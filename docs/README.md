@@ -85,6 +85,7 @@ flowchart LR
 - [Package Release](15-发布版本Release学习手册-V1.0.md)：套餐版本与历史权益。
 - [交付清单与文件对象](16-交付清单与文件对象学习手册-V1.0.md)：Manifest、ManifestItem 和 FileObject。
 - [领域词汇表](../GLOSSARY.md)：统一 Product、Package、Grant、Release 等术语。
+- [简历与面试证据清单](27-简历与面试证据清单-V1.0.md)：把四条候选简历表述逐项连接到真实代码、测试、掌握门槛和禁止夸大的边界；完成主线后使用。
 
 ## 日志与审查证据
 
