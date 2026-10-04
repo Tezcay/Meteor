@@ -18,6 +18,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import org.springframework.core.io.ClassPathResource;
 
 class DownloadServiceTest {
 
@@ -57,7 +58,9 @@ class DownloadServiceTest {
         assertThat(result.filename()).isEqualTo("basic-resume-template.html");
         assertThat(result.mediaType()).isEqualTo("text/html");
         assertThat(result.sha256()).isEqualTo(FILE_HASH);
-        assertThat(result.content()).hasSize(634);
+        assertThat(result.sizeBytes()).isEqualTo(634L);
+        assertThat(result.resource()).isInstanceOf(ClassPathResource.class);
+        assertThat(result.resource().isReadable()).isTrue();
         assertThat(mapper.consumedTicketId).isEqualTo(9001L);
         assertThat(mapper.consumedAt).isEqualTo(NOW);
         assertThat(mapper.audit.outcome()).isEqualTo(DownloadAuditOutcome.FILE_RESPONSE_PREPARED);

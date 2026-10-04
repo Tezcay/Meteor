@@ -4,6 +4,7 @@ import dev.meteor.auth.security.MeteorUserPrincipal;
 import dev.meteor.download.dto.DownloadFilePayload;
 import dev.meteor.download.service.DownloadService;
 import java.nio.charset.StandardCharsets;
+import org.springframework.core.io.Resource;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -26,7 +27,7 @@ public class DownloadController {
     }
 
     @GetMapping("/{token}")
-    public ResponseEntity<byte[]> download(
+    public ResponseEntity<Resource> download(
             @AuthenticationPrincipal MeteorUserPrincipal principal,
             @PathVariable String token
     ) {
@@ -36,10 +37,10 @@ public class DownloadController {
                 .build();
         return ResponseEntity.ok()
                 .contentType(MediaType.parseMediaType(file.mediaType()))
-                .contentLength(file.content().length)
+                .contentLength(file.sizeBytes())
                 .cacheControl(CacheControl.noStore())
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
                 .header("X-Content-SHA256", file.sha256())
-                .body(file.content());
+                .body(file.resource());
     }
 }

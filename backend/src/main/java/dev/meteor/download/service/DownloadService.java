@@ -11,7 +11,9 @@ import dev.meteor.download.model.DownloadAuditOutcome;
 import dev.meteor.download.model.DownloadTicketStatus;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.security.DigestInputStream;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -22,6 +24,7 @@ import java.util.Base64;
 import java.util.HexFormat;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -109,7 +112,7 @@ public class DownloadService {
             throw new DownloadNotFoundException();
         }
 
-        byte[] content = readAndVerify(file);
+        Resource resource = verifyClasspathResource(file);
         if (downloadMapper.markTicketConsumed(ticket.id(), userId, now) != 1) {
             throw new DownloadNotFoundException();
         }
@@ -121,7 +124,7 @@ public class DownloadService {
                 file.manifestItemId(),
                 file.fileObjectId(),
                 DownloadAuditOutcome.FILE_RESPONSE_PREPARED,
-                content.length,
+                file.sizeBytes(),
                 file.contentSha256()
         ));
         if (insertedAudits != 1) {
@@ -133,7 +136,8 @@ public class DownloadService {
                 file.originalFilename(),
                 file.mediaType(),
                 file.contentSha256(),
-                content
+                file.sizeBytes(),
+                resource
         );
     }
 
@@ -147,19 +151,25 @@ public class DownloadService {
                 .orElseThrow(DownloadNotFoundException::new);
     }
 
-    private byte[] readAndVerify(DownloadableFileProjection file) {
+    private Resource verifyClasspathResource(DownloadableFileProjection file) {
         if (!CLASSPATH_PROVIDER.equals(file.storageProvider())) {
             throw new DownloadStorageException(
                     new IllegalStateException("Unsupported storage provider")
             );
         }
-        try (InputStream input = new ClassPathResource(file.storageKey()).getInputStream()) {
-            byte[] content = input.readAllBytes();
-            if (content.length != file.sizeBytes()
-                    || !sha256(content).equalsIgnoreCase(file.contentSha256())) {
+        ClassPathResource resource = new ClassPathResource(file.storageKey());
+        try (InputStream source = resource.getInputStream()) {
+            MessageDigest digest = sha256Digest();
+            long sizeBytes;
+            try (DigestInputStream input = new DigestInputStream(source, digest)) {
+                sizeBytes = input.transferTo(OutputStream.nullOutputStream());
+            }
+            String contentSha256 = HexFormat.of().formatHex(digest.digest());
+            if (sizeBytes != file.sizeBytes()
+                    || !contentSha256.equalsIgnoreCase(file.contentSha256())) {
                 throw new DownloadIntegrityException();
             }
-            return content;
+            return resource;
         } catch (DownloadIntegrityException exception) {
             throw exception;
         } catch (IOException exception) {
@@ -174,8 +184,12 @@ public class DownloadService {
     }
 
     private static String sha256(byte[] value) {
+        return HexFormat.of().formatHex(sha256Digest().digest(value));
+    }
+
+    private static MessageDigest sha256Digest() {
         try {
-            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value));
+            return MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException exception) {
             throw new IllegalStateException("SHA-256 is unavailable", exception);
         }

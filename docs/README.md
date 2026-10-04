@@ -45,7 +45,7 @@ flowchart LR
 | 支付 | 已完成默认关闭的本地测试适配器 | 10 项 Service 测试、7 项 Web 契约测试；不是真实支付 |
 | 权益 | 已完成事务内幂等 Grant、历史回填、内容库与订单查询 | 重放不重复授权、跨账号隐藏资源 |
 | 版本交付 | 已完成 Release、冻结 Manifest 和 Classpath 文件元数据 | 9 项 Service 测试、9 项 HTTP 授权契约、Flyway V9～V10 |
-| 下载 | 已完成本地小文件最小闭环 | 五分钟一次性票据、二次授权、重复消费 404、V12 |
+| 下载 | 已完成本地 Classpath 文件最小闭环 | 五分钟一次性票据、二次授权、流式校验与 Resource 响应、重复消费 404、V12 |
 | 无障碍 | 核心路由完成一轮自动扫描和关键人工检查 | 11 路由 axe 0 违规、键盘、320px、减少动画 |
 | 数据库集成测试 | 代码已接入，真实容器运行待完成 | 2 项被 Maven 发现；Docker 不可用时跳过 |
 | 可重复验证 | 本地一键门禁已完成，托管 CI 未做 | Maven Wrapper、前端格式／构建、链接和空白检查 |
@@ -111,7 +111,7 @@ flowchart LR
 1. Docker Desktop 仍不可用，2 项 Testcontainers 测试没有取得 `Skipped: 0` 证据。
 2. 已有本地质量门禁，仍缺根据实际代码托管平台运行的 CI。
 3. 支付数据库当前只允许一次尝试和一种成功事件；接入真实支付、退款或换渠道前需要扩展事件 Inbox、重试、对账和状态转移规则。
-4. 下载使用 `readAllBytes()` 读取 Classpath 小文件；生产对象存储还需要流式传输或短时签名 URL、Range、限流和失败审计。
+4. 下载已使用 `DigestInputStream` 做固定内存校验，并以 Spring `Resource` 写响应；当前校验和响应会读取 Classpath 文件两遍，生产对象存储仍需不可变版本或 ETag、短时签名 URL、Range、限流和传输失败审计。
 5. 无障碍仍缺 NVDA／VoiceOver、Safari／Firefox、真机、200%／400% 缩放和强制颜色模式审计。
 6. 当前请求编号只覆盖单个后端进程；仍缺集中日志、指标、告警和跨服务 trace context，不能描述为生产可观测性平台。
 

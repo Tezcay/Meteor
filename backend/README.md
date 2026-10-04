@@ -1,6 +1,6 @@
 # Meteor Backend：公开商品读取与会话认证
 
-当前实现公开商品读取、Spring Security Session 登录，以及“服务端核价下单 → 本地测试支付 → 购买权益 → 内容库／订单 → Package 发布版本 → 冻结交付清单 → 一次性受控下载”闭环。数据库由 Flyway 管理到 V12。下载最小切片使用仓库内 Classpath 小文件，不等同于生产对象存储、大文件流式传输或真实支付。
+当前实现公开商品读取、Spring Security Session 登录，以及“服务端核价下单 → 本地测试支付 → 购买权益 → 内容库／订单 → Package 发布版本 → 冻结交付清单 → 一次性受控下载”闭环。数据库由 Flyway 管理到 V12。下载最小切片会流式校验 Classpath 文件并以 Spring `Resource` 写响应，不会把整份文件放进 JVM 堆内存；它仍不等同于生产对象存储、Range／断点续传或真实支付。
 
 ## 代码地图
 
@@ -48,7 +48,8 @@ Vue 前端 frontend/（Vite 开发服务器）
   → DownloadService 重新校验当前用户、ACTIVE Grant、PUBLISHED Release 和条目归属
   → download_tickets 保存五分钟一次性 token 的 SHA-256，不保存原 token
   → GET /api/downloads/{token}
-  → 锁定并消费票据、再次校验权益、核对文件大小与 SHA-256
+  → 再次校验权益并流式核对文件大小与 SHA-256，随后锁定并消费票据
+  → Spring Resource 分块写入文件响应
   → download_audits 记录 FILE_RESPONSE_PREPARED
 ```
 

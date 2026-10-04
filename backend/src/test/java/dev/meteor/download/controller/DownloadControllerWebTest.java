@@ -25,6 +25,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -97,7 +98,8 @@ class DownloadControllerWebTest {
                 "starter-kit.zip",
                 "application/zip",
                 "abc123",
-                body
+                body.length,
+                new ByteArrayResource(body)
         ));
 
         mockMvc.perform(get("/api/downloads/{token}", TOKEN)
