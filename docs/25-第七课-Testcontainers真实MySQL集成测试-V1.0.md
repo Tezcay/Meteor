@@ -1,9 +1,9 @@
 # 第七课：Testcontainers 真实 MySQL 集成测试 V1.0
 
 > 对应代码：`backend/src/test/java/dev/meteor/integration/PurchaseFlowMySqlIntegrationTest.java`。
-> 总学习时间：约 2 小时 15 分钟；每节 10～20 分钟，可以分开完成。
+> 总学习时间：约 2 小时 30 分钟；每节 10～20 分钟，可以分开完成。
 > 前置课：[第四课：测试支付与事务内权益发放](22-第四课-测试支付与事务内权益发放-V1.0.md)。
-> 当前验证状态：2026-10-04 本机已实际启动 MySQL 8.0.36 容器；2 项容器测试通过、0 跳过，全量后端 95 项通过，严格门禁完整通过。
+> 当前验证状态：2026-10-05 本机已实际启动 MySQL 8.0.36 容器；2 项容器测试通过、0 跳过，全量后端 95 项通过，严格门禁完整通过；同键双线程下单场景连续运行 3 轮均通过。
 
 ## 0. 学习安排
 
@@ -13,7 +13,7 @@
 | 2. 容器怎样接入 Spring | 15 分钟 | 看懂三个依赖、三个注解和 `@ServiceConnection` | 第 3 节数据库启动 |
 | 3. Flyway 与隔离数据库 | 15 分钟 | 理解每次从空库迁移以及为什么不污染本地库 | 第 4 节成功链 |
 | 4. 下单支付下载成功链 | 20 分钟 | 把 Service、Mapper、事务、文件和真实表串起来 | 第 5 节幂等证据 |
-| 5. 幂等与归属证据 | 15 分钟 | 看懂数据库计数和跨用户 404 的断言 | 第 6 节回滚链 |
+| 5. 幂等、并发与归属证据 | 30 分钟 | 看懂数据库计数、双线程竞争和跨用户 404 的断言 | 第 6 节回滚链 |
 | 6. 强制失败与事务回滚 | 20 分钟 | 理解两个临时 Trigger 怎样证明支付与下载原子性 | 第 7 节运行方法 |
 | 7. 怎样运行和判读报告 | 15 分钟 | 分清通过、跳过和环境失败 | 第 8 节质量门禁 |
 | 8. 一键质量门禁 | 15 分钟 | 看懂 Wrapper、普通模式和严格模式 | 第 9 节测试边界 |
@@ -258,7 +258,7 @@ FROM orders
 WHERE idempotency_key = 'it-purchase-success';
 ```
 
-Service 返回同一个 ID 证明应用分支正确，行数为 1 证明没有偷偷插入重复订单。
+Service 返回同一个 ID 证明应用分支正确，行数为 1 证明没有偷偷插入重复订单。这一段是先后调用；第 5.2 节再让两个线程同时进入。
 
 ### 4.4 应用支付事件
 
@@ -307,7 +307,7 @@ DownloadFilePayload file = downloadService.consume(buyerId, token);
 
 这仍是 Service／Mapper／真实 MySQL 集成测试，没有经过 Session、CSRF 或浏览器保存；HTTP 边界继续由 `DownloadControllerWebTest` 与真实浏览器验收负责。
 
-## 5. 测试里怎样证明幂等和资源归属
+## 5. 测试里怎样证明幂等、并发和资源归属
 
 ### 5.1 不只断言返回对象
 
@@ -324,7 +324,54 @@ download_audits       1 行
 
 这些断言与数据库唯一约束一起检查结果。唯一约束负责最终防线，测试负责证明当前代码确实遵守设计。
 
-### 5.2 重新通过 Service 读取订单
+### 5.2 两个线程怎样制造真实唯一键竞争
+
+预计时间：15 分钟。读完后能解释 `CountDownLatch`、测试 Trigger 和四项断言各自负责什么。
+
+顺序重放会在第二次调用开始前看到旧订单，无法进入“两个请求都先查不到”的竞争窗口。测试因此创建两个任务，让它们先在同一条起跑线上等待：
+
+```java
+CountDownLatch ready = new CountDownLatch(2);
+CountDownLatch start = new CountDownLatch(1);
+ExecutorService executor = Executors.newFixedThreadPool(2);
+
+Future<OrderResponse> first = executor.submit(
+        () -> createOrderAfterStartSignal(buyerId, request, ready, start)
+);
+Future<OrderResponse> second = executor.submit(
+        () -> createOrderAfterStartSignal(buyerId, request, ready, start)
+);
+
+assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+start.countDown();
+```
+
+`CountDownLatch` 是一次性的线程协作计数器。两个任务各自执行 `ready.countDown()`，主测试确认两者都已就绪后调用 `start.countDown()`，两个任务才同时执行 `orderService.createOrder`。
+
+只同时放行仍可能被操作系统迅速串行调度。为了稳定扩大两个事务的重叠时间，测试在临时库创建一个只延迟 `orders` 插入的 Trigger：
+
+```sql
+CREATE TRIGGER delay_integration_test_order
+BEFORE INSERT ON orders
+FOR EACH ROW
+SET @integration_test_delay = SLEEP(1);
+```
+
+两个线程会先分别执行幂等查询；进入插入时各等待 1 秒，更容易让双方都已经读到“还没有订单”。随后唯一约束只允许一个事务写入，失败方捕获 `DuplicateKeyException`，通过 `SELECT ... FOR UPDATE` 当前读读取胜出的订单。
+
+Trigger 只存在于 Testcontainers 的一次性数据库中，并在 `finally` 中删除。它不属于生产逻辑，也不会让真实用户下单等待 1 秒。
+
+测试最后同时检查返回值和数据库状态：
+
+```java
+assertThat(responses.get(0).id()).isEqualTo(responses.get(1).id());
+assertThat(count("orders", "idempotency_key", idempotencyKey)).isEqualTo(1);
+assertThat(count("order_items", "order_id", responses.get(0).id())).isEqualTo(1);
+```
+
+这证明当前代码在一次两请求竞争中收敛到同一订单，并且没有重复订单项。本机连续运行 3 轮均通过。测试没有增加用户数、请求持续时间或并发级别，也没有统计吞吐量与延迟，因此不能称为压力测试、性能测试或生产容量验证。
+
+### 5.3 重新通过 Service 读取订单
 
 ```java
 assertThat(orderService.getOrder(buyerId, order.id()).status())
@@ -333,7 +380,7 @@ assertThat(orderService.getOrder(buyerId, order.id()).status())
 
 这会执行 `OrderMapper.findDetailByIdAndUserId` 的真实 JOIN，能发现订单详情投影和权益字段映射问题。
 
-### 5.3 另一个用户看不到订单
+### 5.4 另一个用户看不到订单
 
 ```java
 assertThatThrownBy(() -> orderService.getOrder(creatorId, order.id()))
@@ -477,18 +524,18 @@ Tests run: 2, Failures: 0, Errors: 0, Skipped: 2
 
 `Skipped: 2` 表示 JUnit 发现了测试，但因为 Docker 不可用没有执行测试方法。
 
-### 7.4 2026-10-04 的实际证据
+### 7.4 2026-10-05 的实际证据
 
 本轮得到的实际证据：
 
 - Docker Desktop 4.86.0 最初被两个损坏的 Windows AF_UNIX socket 阻塞：`Docker/run/dockerInference` 和 `docker-secrets-engine/engine.sock`；停止进程后同时移动两个父目录并关闭 Docker AI，Linux 引擎恢复为 `Running`。旧目录保留为时间戳备份，没有恢复出厂设置，也没有删除镜像、容器或卷。
 - 第一次真实运行暴露 MySQL 错误 1419：应用测试账号没有 `SUPER` 权限，无法创建故障注入 Trigger。测试容器增加 `--log-bin-trust-function-creators=1` 后，业务仍使用普通 `meteor_test` 账号，只有一次性测试服务器放宽 Trigger 创建限制。
-- 单独运行 `PurchaseFlowMySqlIntegrationTest` 得到 `Tests run: 2, Failures: 0, Errors: 0, Skipped: 0`。
+- 单独运行 `PurchaseFlowMySqlIntegrationTest` 连续 3 轮均得到 `Tests run: 2, Failures: 0, Errors: 0, Skipped: 0`；每轮都执行同键双线程竞争。
 - 临时 MySQL 从空库成功应用 Flyway V1～V12；第一项实跑购买成功、支付重放、逐层授权、一次性下载和重复 token；第二项实跑 Grant 与 DownloadAudit 两类失败回滚，以及同 token 重试。
 - 全仓严格门禁得到后端 `Tests run: 95, Failures: 0, Errors: 0, Skipped: 0`；前端 Prettier、TypeScript 和 Vite 生产构建、51 份 Markdown 相对链接及 Git 空白检查同时通过。
 - 测试连接的是临时 `meteor_test` 容器库，结束后由 Testcontainers 清理；没有连接或改动本机 `meteor` 业务数据库。
 
-因此现在可以准确表述为“使用 Testcontainers 和真实 MySQL 8.0.36 验证 Flyway V1～V12、购买到下载成功链，以及支付／下载事务回滚”。不能扩大成真实支付、生产对象存储、部署或高并发验证。
+因此现在可以准确表述为“使用 Testcontainers 和真实 MySQL 8.0.36 验证 Flyway V1～V12、同键双线程下单、购买到下载成功链，以及支付／下载事务回滚”。不能扩大成真实支付、生产对象存储、部署、高并发或性能验证。
 
 ## 8. 一键质量门禁
 
@@ -516,7 +563,7 @@ Docker 可用后运行严格模式：
 .\scripts\verify.ps1 -RequireContainers
 ```
 
-严格模式单独读取 `PurchaseFlowMySqlIntegrationTest` 的报告，要求 `tests=2` 且 `skipped=0`。2026-10-04 本机实际结果为 `tests=2, skipped=0`，随后前端和文档检查也全部完成，命令退出码为 0。
+严格模式单独读取 `PurchaseFlowMySqlIntegrationTest` 的报告，要求 `tests=2` 且 `skipped=0`。2026-10-05 本机实际结果为 `tests=2, skipped=0`，随后前端和文档检查也全部完成，命令退出码为 0。
 
 Maven Wrapper 固定构建工具版本，Java 21 仍需由电脑或 CI 提供。Wrapper 第一次运行要下载 Maven，不能把它理解为把 JDK 和所有依赖都存进仓库。
 
@@ -546,7 +593,7 @@ Maven Wrapper 固定构建工具版本，Java 21 仍需由电脑或 CI 提供。
 
 答：
 
-> 可以，但要带上范围：本机已用 Testcontainers 启动 MySQL 8.0.36，2 项集成测试实际执行且 0 跳过，验证了 V1～V12、购买和下载链、Grant 与 DownloadAudit 失败回滚。它没有经过真实支付商、生产对象存储或部署环境。
+> 可以，但要带上范围：本机已用 Testcontainers 启动 MySQL 8.0.36，2 项集成测试实际执行且 0 跳过，验证了 V1～V12、同键双线程下单、购买和下载链、Grant 与 DownloadAudit 失败回滚。双线程场景连续 3 轮通过，但这不是压力测试；它也没有经过真实支付商、生产对象存储或部署环境。
 
 ### 下一步 CI 应做什么
 
@@ -569,6 +616,9 @@ Maven Wrapper 固定构建工具版本，Java 21 仍需由电脑或 CI 提供。
 - [ ] 能说明为什么测试库关闭 `baseline-on-migrate`。
 - [ ] 能画出成功支付写入的四类数据。
 - [ ] 能解释相同幂等键和相同支付事件怎样验证只写一次。
+- [ ] 能解释两个 `CountDownLatch` 如何让两个下单任务从同一起跑线开始。
+- [ ] 能说明延迟 Trigger 只负责扩大测试竞争窗口，不属于生产下单逻辑。
+- [ ] 能用相同订单 ID、1 个订单头和 1 个订单项证明两请求收敛。
 - [ ] 能说明临时 Trigger 为什么在 Grant 插入处制造失败。
 - [ ] 能用四项数据库结果证明事务回滚。
 - [ ] 能说明一次性下载成功时 Ticket 和 Audit 各自写入什么。
@@ -576,6 +626,6 @@ Maven Wrapper 固定构建工具版本，Java 21 仍需由电脑或 CI 提供。
 - [ ] 能区分 `Failures: 0` 与 `Skipped: 2`。
 - [ ] 能解释普通门禁为何警告跳过、严格门禁为何直接失败。
 - [ ] 能说出 Maven Wrapper 固定了什么、仍未提供什么。
-- [ ] 不会把“本机 2 项真实 MySQL 测试通过”扩大成生产数据库、真实支付或高并发验证。
+- [ ] 不会把“本机 2 项真实 MySQL 测试通过”扩大成生产数据库、真实支付、压力测试或高并发容量验证。
 
 下一次从这里继续：先亲手运行一次 `scripts\verify.ps1 -RequireContainers` 并打开 Surefire 报告定位这 2 项测试；能够解释成功链和两类回滚后，再按实际代码托管平台接入 CI。

@@ -15,6 +15,12 @@ import dev.meteor.order.service.OrderService;
 import dev.meteor.payment.dto.PaymentResponse;
 import dev.meteor.payment.dto.TestPaymentEventRequest;
 import dev.meteor.payment.service.PaymentService;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -56,7 +62,7 @@ class PurchaseFlowMySqlIntegrationTest {
     private DownloadService downloadService;
 
     @Test
-    void runsAllMigrationsAndCompletesIdempotentPurchaseAndDownload() {
+    void runsAllMigrationsAndCompletesIdempotentPurchaseAndDownload() throws Exception {
         long buyerId = userId("buyer@meteor.local");
         long creatorId = userId("creator@meteor.local");
 
@@ -75,6 +81,8 @@ class PurchaseFlowMySqlIntegrationTest {
         assertThat(order.totalAmountCents()).isEqualTo(1900L);
         assertThat(replayedOrder.id()).isEqualTo(order.id());
         assertThat(count("orders", "idempotency_key", "it-purchase-success")).isEqualTo(1);
+
+        assertConcurrentOrderCreationConverges(buyerId);
 
         TestPaymentEventRequest paymentEvent = new TestPaymentEventRequest(
                 "it-event-success",
@@ -213,6 +221,63 @@ class PurchaseFlowMySqlIntegrationTest {
         assertThat(retriedFile.sizeBytes()).isEqualTo(634L);
         assertThat(ticketStatus(authorization.ticketId())).isEqualTo("CONSUMED");
         assertThat(count("download_audits", "download_ticket_id", authorization.ticketId())).isEqualTo(1);
+    }
+
+    private void assertConcurrentOrderCreationConverges(long buyerId) throws Exception {
+        String idempotencyKey = "it-order-concurrent";
+        CreateOrderRequest request = new CreateOrderRequest(1001L, 2001L, idempotencyKey);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        List<OrderResponse> responses = List.of();
+
+        jdbcTemplate.execute("""
+                CREATE TRIGGER delay_integration_test_order
+                BEFORE INSERT ON orders
+                FOR EACH ROW
+                SET @integration_test_delay = SLEEP(1)
+                """);
+        try {
+            Future<OrderResponse> first = executor.submit(
+                    () -> createOrderAfterStartSignal(buyerId, request, ready, start)
+            );
+            Future<OrderResponse> second = executor.submit(
+                    () -> createOrderAfterStartSignal(buyerId, request, ready, start)
+            );
+
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            responses = List.of(
+                    first.get(15, TimeUnit.SECONDS),
+                    second.get(15, TimeUnit.SECONDS)
+            );
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+            try {
+                executor.awaitTermination(5, TimeUnit.SECONDS);
+            } finally {
+                jdbcTemplate.execute("DROP TRIGGER IF EXISTS delay_integration_test_order");
+            }
+        }
+
+        assertThat(responses).hasSize(2);
+        assertThat(responses.get(0).id()).isEqualTo(responses.get(1).id());
+        assertThat(count("orders", "idempotency_key", idempotencyKey)).isEqualTo(1);
+        assertThat(count("order_items", "order_id", responses.get(0).id())).isEqualTo(1);
+    }
+
+    private OrderResponse createOrderAfterStartSignal(
+            long buyerId,
+            CreateOrderRequest request,
+            CountDownLatch ready,
+            CountDownLatch start
+    ) throws Exception {
+        ready.countDown();
+        if (!start.await(5, TimeUnit.SECONDS)) {
+            throw new IllegalStateException("Timed out waiting to start concurrent order creation");
+        }
+        return orderService.createOrder(buyerId, request);
     }
 
     private long userId(String email) {
