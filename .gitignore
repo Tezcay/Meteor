@@ -13,3 +13,6 @@
 
 /learning-labs/
 .local-backups/
+.playwright-cli/
+/output/playwright/
+/.impeccable/

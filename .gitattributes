@@ -1,0 +1,5 @@
+backend/src/main/resources/delivery-fixtures/** text eol=lf
+backend/.mvn/wrapper/maven-wrapper.properties text eol=lf
+backend/mvnw text eol=lf
+backend/mvnw.cmd text eol=crlf
+scripts/*.ps1 text eol=crlf

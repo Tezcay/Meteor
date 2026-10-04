@@ -1,6 +1,6 @@
-# Meteor Backend：M1 公开商品读取
+# Meteor Backend：公开商品读取与会话认证
 
-当前实现公开商品列表、关键词搜索和详情读取。Spring Boot 通过 MyBatis 从 MySQL 查询已发布商品 Revision 与套餐。数据库已使用 Flyway 管理迁移，并建立用户角色、店铺归属、商品 Revision 和分层分类的基础结构；登录、交易、Redis 和文件交付尚未实现。
+当前实现公开商品读取、Spring Security Session 登录，以及“服务端核价下单 → 本地测试支付 → 购买权益 → 内容库／订单 → Package 发布版本 → 冻结交付清单 → 一次性受控下载”闭环。数据库由 Flyway 管理到 V12。下载最小切片使用仓库内 Classpath 小文件，不等同于生产对象存储、大文件流式传输或真实支付。
 
 ## 代码地图
 
@@ -12,9 +12,47 @@ Vue 前端 frontend/（Vite 开发服务器）
   → ProductQueryService
   → ProductMapper + ProductMapper.xml
   → MySQL products / product_revisions / shops / packages
+
+登录后下单：
+  → POST /api/orders
+  → OrderController
+  → OrderService（服务端核价、幂等检查、事务）
+  → OrderMapper
+  → MySQL orders / order_items
+
+本地测试支付：
+  → POST /api/orders/{orderId}/test-payment
+  → PaymentController
+  → PaymentService（校验金额、事件幂等、状态转移）
+  → PaymentMapper
+  → MySQL payment_attempts / payment_events
+
+支付后权益与账户查询：
+  → PaymentService → EntitlementMapper → entitlement_grants
+  → GET /api/library → LibraryService
+  → GET /api/orders 与 /api/orders/{id} → OrderService
+
+有效权益下的发布版本：
+  → GET /api/library/{grantId}/releases
+  → ReleaseController → ReleaseService
+  → ACTIVE Grant 归属检查 → ReleaseMapper → MySQL releases
+
+发布版本的冻结交付清单：
+  → GET /api/library/{grantId}/releases/{releaseId}/manifest
+  → DeliveryManifestController → DeliveryManifestService
+  → ACTIVE Grant → Package／Release 归属检查
+  → DeliveryManifestMapper → delivery_manifests / manifest_items / file_objects
+
+受控下载：
+  → POST /api/library/{grantId}/releases/{releaseId}/manifest/items/{manifestItemId}/download-authorizations
+  → DownloadService 重新校验当前用户、ACTIVE Grant、PUBLISHED Release 和条目归属
+  → download_tickets 保存五分钟一次性 token 的 SHA-256，不保存原 token
+  → GET /api/downloads/{token}
+  → 锁定并消费票据、再次校验权益、核对文件大小与 SHA-256
+  → download_audits 记录 FILE_RESPONSE_PREPARED
 ```
 
-顶层 `product` 是商品业务模块。以后会并列增加 `order`、`payment`、`entitlement`、`delivery`；每个模块内部再使用熟悉的 `controller`、`service`、`mapper`、`dto`。这样既能按业务聚合，又不会把整个项目的所有 Controller、Service、Mapper 混在巨大的同名目录中。
+顶层业务模块现在包括 `product`、`auth`、`order`、`payment`、`entitlement`、`delivery`、`download`；每个模块内部再使用熟悉的 `controller`、`service`、`mapper`、`dto`。跨模块的 HTTP 错误响应集中在 `web.error`，不再错误归属于 `product`。这样既能按业务聚合，又不会把整个项目的所有 Controller、Service、Mapper 混在巨大的同名目录中。
 
 必须看懂的文件：
 
@@ -26,11 +64,29 @@ Vue 前端 frontend/（Vite 开发服务器）
 
 `ProductDetailResponse` 是返回给浏览器的 DTO。`ProductSummaryProjection`、`PackageOptionProjection` 是 SQL 查询列的投影，因为它们来自 JOIN 或部分字段，并不是数据库表的完整 Entity。三者使用 Java record 表达不可变数据载体；record 会自动生成构造器、字段访问方法、`equals`、`hashCode` 和 `toString`。
 
-列表接口最多返回 24 件已发布商品，按创建时间与 ID 倒序排列。`q` 可搜索商品标题、简介和店铺名称，最多 100 个字符；`%`、`_`、`!` 作为普通字符匹配。分类尚未进入商品表，前端目前只把种子商品归为“模板”，其他分类继续展示不参与购买的灵感素材。
+列表接口最多返回 24 件已发布商品，按创建时间与 ID 倒序排列。`q` 可搜索商品标题、简介和店铺名称，最多 100 个字符；`%`、`_`、`!` 作为普通字符匹配。分类通过 `product_revision_taxonomy_terms` 关联到已发布 Revision，并支持按 taxonomy slug 过滤；本地数据库目前只预置一件真实商品，其他前端分类卡片继续作为不参与购买的灵感素材。
+
+## 会话认证
+
+认证使用数据库账号、BCrypt 密码哈希、Spring Security Session 和 CSRF 防护。公开商品 GET 接口和 CSRF 获取接口允许匿名访问；`/api/me` 及后续业务接口默认要求登录。
+
+V3 迁移保留两个本地演示账号，密码均为 `password`；认证默认拒绝这两个账号，只有显式设置 `METEOR_DEMO_ACCOUNTS_ENABLED=true` 才能登录：
+
+- `buyer@meteor.local`：普通买家，角色 `USER`。
+- `creator@meteor.local`：创作者，角色 `USER`、`CREATOR`。
+
+这些凭据只用于本地学习环境，部署时不得开启演示账号开关。调用顺序：
+
+1. `GET /api/auth/csrf`，保留响应 Cookie，并读取响应中的 `headerName` 和 `token`。
+2. `POST /api/auth/login`，发送 JSON 邮箱与密码，并将 token 放入指定请求头。
+3. `GET /api/me`，携带同一会话 Cookie 获取当前用户。
+4. 退出前重新获取 CSRF token，再 `POST /api/auth/logout`；成功返回 204。
+
+登录会规范化邮箱的首尾空格和大小写，但不会修改密码内容。认证失败统一返回 `AUTHENTICATION_FAILED`，不区分账号不存在或密码错误。
 
 ## 数据库迁移
 
-数据库结构由 Flyway 管理。`V1` 保留最初的商品读取基线，`V2` 将已有本地数据迁移到用户／角色、店铺归属、商品 Revision 和 `taxonomy_terms` 结构。已经应用的迁移文件不得修改；后续变化必须新增 `V3`、`V4` 等迁移。
+数据库结构由 Flyway 管理到 V12。V6 创建购买权益，V7 回填历史已支付订单，V8 默认锁定固定演示凭据，V9 创建 Package 级 Release，V10 创建不可变交付清单与文件对象元数据，V11 统一订单状态，V12 创建一次性下载票据与响应准备审计。应用启动时仅在显式开启本地开关后恢复演示密码，否则会再次锁定。已经应用的迁移文件不得修改；后续变化必须新增更高版本迁移。
 
 为了接管早期没有 Flyway 历史表的本地 `meteor` 数据库，当前开发配置启用 `baseline-on-migrate` 并将基线版本设为 1。部署到全新或正式环境时应显式设置 `METEOR_FLYWAY_BASELINE_ON_MIGRATE=false`，避免错误接管未知数据库。
 
@@ -46,21 +102,37 @@ E:\VibeCoding\Meteor\scripts\mysql\bootstrap-local.sql
 
 ## 编译与测试
 
-当前机器的 IntelliJ Maven 默认错误地使用 Java 8，而项目编译目标为 Java 21。Codex 沙箱与当前 Windows 用户还会选择不同的 Maven 本地缓存。仓库内脚本会为当前进程指定已安装的 JDK 26、当前用户的 Maven 缓存，再调用 IntelliJ Maven：
+仓库包含 Maven Wrapper，并锁定 Maven 3.9.16。安装 Java 21 后即可执行：
 
 ```powershell
-.\mvn-local.ps1 test
+.\mvnw.cmd test
 ```
 
-项目编译目标为 Java 21，当前 JDK 26 可以生成 Java 21 字节码。这个脚本只适用于当前电脑；后续补 Maven Wrapper，避免依赖固定的安装路径。
+首次运行会从 Maven Central 下载该版本 Maven。`mvn-local.ps1` 只用于当前电脑上排查 IntelliJ Maven／JDK 路径问题，不是跨机器构建入口。
+
+原有 53 项测试覆盖商品查询、数据库账号加载、订单核价与幂等、测试支付事件与金额校验、权益发放、Release／Manifest 权限、下载票据签发与一次性消费、文件完整性，以及登录、CSRF、Session 和下载响应头的 Web 行为。
+
+`PurchaseFlowMySqlIntegrationTest` 另外定义 2 项 Testcontainers 测试：临时 MySQL 从空库执行 Flyway V1～V12，再使用真实 MyBatis Mapper 验证下单／支付／权益幂等链，以及 Grant 插入失败时的事务回滚。Docker 可用时可单独执行：
+
+```powershell
+.\mvnw.cmd -Dtest=PurchaseFlowMySqlIntegrationTest test
+```
+
+真正通过时报告必须为 `Tests run: 2, Skipped: 0`。2026-10-04 本机 Docker Desktop 因遗留 `dockerInference` socket 启动崩溃；当前全量报告是 55 项被发现、53 项通过、2 项跳过。测试代码已编译，不等于容器测试已验证。修复方法和逐行解释见[第七课](../docs/25-第七课-Testcontainers真实MySQL集成测试-V1.0.md)。
+
+项目编译目标为 Java 21。仓库根目录的 `scripts/verify.ps1` 会统一执行 Wrapper 后端测试、前端格式与构建、文档链接和 Git 空白检查；Docker 可用后追加 `-RequireContainers`，如果这两项集成测试被跳过，命令会失败。
 
 ## 启动
 
 完成建库后：
 
 ```powershell
-.\mvn-local.ps1 spring-boot:run
+$env:METEOR_DEMO_ACCOUNTS_ENABLED='true'
+$env:METEOR_TEST_PAYMENT_ENABLED='true'
+.\mvnw.cmd spring-boot:run
 ```
+
+演示账号认证和 `test-payment` 本地学习适配器都默认关闭。前者由 `METEOR_DEMO_ACCOUNTS_ENABLED` 控制，后者由 `METEOR_TEST_PAYMENT_ENABLED` 控制；部署或普通运行时不要开启。
 
 后端只提供 API；页面由独立前端在 `http://localhost:5173/` 提供。启动方式见 [前端说明](../frontend/README.md)。可检查：
 
@@ -69,6 +141,12 @@ E:\VibeCoding\Meteor\scripts\mysql\bootstrap-local.sql
 - `http://localhost:8080/api/products?q=求职`：应返回匹配的商品。
 - `http://localhost:8080/api/products/9999`：应返回 404 和 `PRODUCT_NOT_FOUND`。
 - `http://localhost:8080/api/products/0`：应返回 400 和 `INVALID_ARGUMENT`。
+- 登录后用 `POST /api/orders` 创建订单：服务端会从 `packages.price_cents` 取价，不能由前端传入金额。
+- 用 `POST /api/orders/{orderId}/test-payment` 模拟本地支付成功；同一 `providerEventId` 重放不会重复应用。
+- 登录后用 `GET /api/library` 查看 ACTIVE 权益；用 `GET /api/orders` 和 `GET /api/orders/{orderId}` 查看当前用户订单及权益状态。
+- 用 `GET /api/library/{grantId}/releases` 查看有效权益对应套餐的正式版本；别人的、撤销的或不存在的 Grant 返回 404。
+- 用 `GET /api/library/{grantId}/releases/{releaseId}/manifest` 查看该版本冻结的文件清单；跨套餐 Release 或其他用户的 Grant 返回 404，响应不会泄露内部 `storage_key`。
+- 用下载授权 POST 为某个 ManifestItem 申请五分钟票据，再请求响应中的 `downloadUrl`；同一 URL 成功一次后再次请求返回 404。
 
 ## 学习检查
 
