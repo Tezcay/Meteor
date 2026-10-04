@@ -119,9 +119,9 @@ E:\VibeCoding\Meteor\scripts\mysql\bootstrap-local.sql
 .\mvnw.cmd -Dtest=PurchaseFlowMySqlIntegrationTest test
 ```
 
-真正通过时报告必须为 `Tests run: 2, Skipped: 0`。2026-10-04 本机 Docker Desktop 因遗留 `dockerInference` socket 启动崩溃；当前全量报告是 95 项被发现、93 项通过、2 项跳过。测试代码已编译，不等于容器测试已验证。修复方法和逐行解释见[第七课](../docs/25-第七课-Testcontainers真实MySQL集成测试-V1.0.md)。
+真正通过时报告必须为 `Tests run: 2, Skipped: 0`。2026-10-04 本机已实际运行临时 MySQL 8.0.36：容器测试 `2/2` 通过、0 跳过，全量后端 `95/95` 通过。测试专用容器允许创建故障注入 Trigger，生产应用配置不启用该选项。Docker 修复、真实故障和逐行解释见[第七课](../docs/25-第七课-Testcontainers真实MySQL集成测试-V1.0.md)。
 
-项目编译目标为 Java 21。仓库根目录的 `scripts/verify.ps1` 会统一执行 Wrapper 后端测试、前端格式与构建、文档链接和 Git 空白检查；Docker 可用后追加 `-RequireContainers`，如果这两项集成测试被跳过，命令会失败。
+项目编译目标为 Java 21。仓库根目录的 `scripts/verify.ps1` 会统一执行 Wrapper 后端测试、前端格式与构建、文档链接和 Git 空白检查；形成简历或交付证据时追加 `-RequireContainers`，如果这两项集成测试被跳过，命令会失败。
 
 ## 启动
 

@@ -28,6 +28,7 @@ Meteor 是一个面向数字作品交易与交付的全栈学习项目。当前�
 - 五分钟一次性下载票据；只保存 token 哈希，消费前重新校验 Session 用户、ACTIVE Grant、PUBLISHED Release、ManifestItem 和 FileObject，流式核对文件大小与 SHA-256，再以 Spring `Resource` 写响应并记录响应准备审计。
 - Vue 3 桌面与手机端真实业务页面；内容库下载按钮已接真实授权和文件响应。
 - 核心页面的 SPA 焦点、键盘菜单、可见焦点、触摸目标和减少动画支持；11 个路由完成 axe WCAG A/AA 扫描。
+- Testcontainers 临时 MySQL 从空库执行 Flyway V1～V12，并实跑购买、下载、幂等及两类事务回滚；严格门禁要求容器测试不得跳过。
 
 尚未完成：
 
@@ -35,7 +36,6 @@ Meteor 是一个面向数字作品交易与交付的全栈学习项目。当前�
 - 创作者发布与审核写接口。
 - 生产对象存储、Range／断点续传、失败下载审计、限流和对象版本校验。
 - 注册／找回密码、CI、部署与性能验证。
-- Testcontainers 测试代码已经接入并成功编译；本机 Docker Desktop 启动崩溃，2 项真实 MySQL 测试尚未执行，不能计入已通过基线。
 
 因此本项目目前可以描述为“本地测试支付到权益、冻结清单和一次性受控下载的闭环”。当前下载已经避免整文件进入 JVM 堆内存，但只面向按部署约束视为不可变的 Classpath 学习素材；没有生产对象存储、Range 和传输失败处理，不能描述为生产大文件下载系统。
 
@@ -44,9 +44,9 @@ Meteor 是一个面向数字作品交易与交付的全栈学习项目。当前�
 - 后端：Java 21、Spring Boot、Spring Security、MyBatis、Flyway
 - 数据库：MySQL 8.0
 - 前端：Vue 3、TypeScript、Vite
-- 验证：JUnit 5、AssertJ、MockMvc、Testcontainers（待完成容器运行）、Playwright、axe-core、真实 MySQL HTTP 验收
+- 验证：JUnit 5、AssertJ、MockMvc、Testcontainers、Playwright、axe-core、真实 MySQL HTTP 验收
 
-当前基线：Flyway V12；Maven 共发现 95 项后端测试，93 项非容器测试通过，2 项 Testcontainers 测试因 Docker 不可用而跳过；前端类型检查与生产构建通过。11 个核心路由及本轮下载状态 axe WCAG A/AA 为 0 条违规。订单、支付尝试和支付事件状态已经使用明确枚举。每个 HTTP 响应包含 `X-Request-Id`，错误 JSON 和请求完成日志使用同一编号。
+当前基线：Flyway V12；Maven 后端测试 95 项全部通过、0 跳过，其中 2 项 Testcontainers 使用真实 MySQL 8.0.36；前端类型检查与生产构建通过。11 个核心路由及本轮下载状态 axe WCAG A/AA 为 0 条违规。订单、支付尝试和支付事件状态已经使用明确枚举。每个 HTTP 响应包含 `X-Request-Id`，错误 JSON 和请求完成日志使用同一编号。
 
 ## 目录
 
@@ -92,11 +92,11 @@ npm run dev
 .\scripts\verify.ps1
 ```
 
-该命令使用 Maven Wrapper 执行后端测试，再执行前端 Prettier 检查、TypeScript／生产构建、Markdown 相对链接检查和 `git diff --check`。普通模式会明确报告被跳过的测试；Docker 可用后使用 `./scripts/verify.ps1 -RequireContainers`，要求两项 Testcontainers 测试均实际执行。
+该命令使用 Maven Wrapper 执行后端测试，再执行前端 Prettier 检查、TypeScript／生产构建、Markdown 相对链接检查和 `git diff --check`。普通模式会明确报告被跳过的测试；发布证据使用 `./scripts/verify.ps1 -RequireContainers`，要求两项 Testcontainers 测试均实际执行。2026-10-04 本机严格门禁已完整通过。
 
 后端测试覆盖认证、订单核价与幂等、支付事件、权益、订单查询、Release、Manifest 和一次性下载权限。真实 MySQL 与浏览器验收结果记录在 [学习执行日志](docs/08-学习执行日志.md)。
 
-`PurchaseFlowMySqlIntegrationTest` 会在 Docker 可用时启动临时 MySQL，执行 Flyway V1～V12，并验证真实下单支付、重放幂等、一次性下载、重复 token，以及 Grant／DownloadAudit 写入失败时的事务回滚和重试。当前机器尚未得到 `Skipped: 0`，运行方法与证据边界见[第七课](docs/25-第七课-Testcontainers真实MySQL集成测试-V1.0.md)。
+`PurchaseFlowMySqlIntegrationTest` 已实际启动临时 MySQL，执行 Flyway V1～V12，并验证真实下单支付、重放幂等、一次性下载、重复 token，以及 Grant／DownloadAudit 写入失败时的事务回滚和重试。本机报告为 `Tests run: 2, Failures: 0, Errors: 0, Skipped: 0`；运行方法与证据边界见[第七课](docs/25-第七课-Testcontainers真实MySQL集成测试-V1.0.md)。
 
 开发环境可在任一路由追加 `?a11y=1` 运行 axe，例如 `http://localhost:5173/products/1001?a11y=1`。详细复测方法、人工检查和未覆盖边界见 [无障碍审查报告](docs/18-无障碍审查与修复报告-2026-10-03.md)。
 

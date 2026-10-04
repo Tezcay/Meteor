@@ -3,7 +3,7 @@
 > 对应代码：`backend/src/test/java/dev/meteor/integration/PurchaseFlowMySqlIntegrationTest.java`。
 > 总学习时间：约 2 小时 15 分钟；每节 10～20 分钟，可以分开完成。
 > 前置课：[第四课：测试支付与事务内权益发放](22-第四课-测试支付与事务内权益发放-V1.0.md)。
-> 当前验证状态：测试代码已经编译并被 Maven 发现；2026-10-04 本机 Docker Desktop 启动崩溃，因此 2 项容器测试被跳过，尚不能写成“Testcontainers 已跑通”。
+> 当前验证状态：2026-10-04 本机已实际启动 MySQL 8.0.36 容器；2 项容器测试通过、0 跳过，全量后端 95 项通过，严格门禁完整通过。
 
 ## 0. 学习安排
 
@@ -126,8 +126,11 @@ class PurchaseFlowMySqlIntegrationTest {
 
     @Container
     @ServiceConnection
-    private static final MySQLContainer MYSQL =
-            new MySQLContainer("mysql:8.0.36");
+    private static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.0.36")
+            .withCommand("--log-bin-trust-function-creators=1")
+            .withDatabaseName("meteor_test")
+            .withUsername("meteor_test")
+            .withPassword("meteor_test");
 }
 ```
 
@@ -136,6 +139,8 @@ class PurchaseFlowMySqlIntegrationTest {
 - `static`：同一个测试类中的两个方法共享一个容器，避免每个方法重新拉起 MySQL。
 - `@ServiceConnection`：Spring Boot 从容器读取 JDBC URL、用户名和密码，覆盖 `application.yml` 中的本地数据库连接。
 - `disabledWithoutDocker = true`：没有 Docker 时明确跳过，不让普通单元测试连接或破坏本地 MySQL。
+
+`--log-bin-trust-function-creators=1` 只传给这次测试容器。回滚测试需要由测试账号临时创建 Trigger；MySQL 开启 binary log 时，默认会拒绝没有 `SUPER` 权限的账号创建 Trigger。这个参数不在 `application.yml` 中，生产应用不会启用，也不会在运行时创建 Trigger。
 
 官方 JUnit 文档说明静态容器会在该测试类的方法之间共享，并在类结束后停止：[Testcontainers JUnit 5](https://java.testcontainers.org/test_framework_integration/junit_5/)。
 
@@ -429,7 +434,7 @@ SET MESSAGE_TEXT = 'forced download audit failure for transaction test';
 
 测试删除 Trigger 后使用同一 token 重试。重试应成功返回 634 B 文件，并把票据改为 `CONSUMED`、写入一条审计。这一步证明的不只是数据库快照，还证明回滚后用户仍保留一次有效下载机会。
 
-## 7. 运行、报告和当前环境问题
+## 7. 运行、报告和本机修复记录
 
 ### 7.1 先确认 Docker 引擎可用
 
@@ -474,18 +479,16 @@ Tests run: 2, Failures: 0, Errors: 0, Skipped: 2
 
 ### 7.4 2026-10-04 的实际证据
 
-本轮已经确认：
+本轮得到的实际证据：
 
-- Maven 成功解析 Spring Boot 4.1.0 管理的 Testcontainers 2.0.5；
-- 两项测试使用 Java 21 目标成功编译；第一项覆盖购买成功、支付重放、逐层授权、一次性下载和重复 token，第二项覆盖 Grant 插入失败与 DownloadAudit 插入失败两种事务回滚；
-- 全仓 Maven 发现 95 项测试；
-- 93 项非容器测试全部通过，其中包括统一错误 JSON、请求编号、公开商品、订单、支付与交付资源 HTTP 契约、OrderMapper XML 映射契约和支付状态分支；
-- 2 项容器测试因 Docker 环境不可用而跳过；
-- Docker Desktop 4.86.0 日志显示启动时无法访问遗留的 `dockerInference` socket，随后后端退出；
-- 尝试临时关闭 Docker AI 后仍触发同一错误，设置已经恢复；
-- 没有重置 Docker、删除镜像或改动本地业务数据库。
+- Docker Desktop 4.86.0 最初被两个损坏的 Windows AF_UNIX socket 阻塞：`Docker/run/dockerInference` 和 `docker-secrets-engine/engine.sock`；停止进程后同时移动两个父目录并关闭 Docker AI，Linux 引擎恢复为 `Running`。旧目录保留为时间戳备份，没有恢复出厂设置，也没有删除镜像、容器或卷。
+- 第一次真实运行暴露 MySQL 错误 1419：应用测试账号没有 `SUPER` 权限，无法创建故障注入 Trigger。测试容器增加 `--log-bin-trust-function-creators=1` 后，业务仍使用普通 `meteor_test` 账号，只有一次性测试服务器放宽 Trigger 创建限制。
+- 单独运行 `PurchaseFlowMySqlIntegrationTest` 得到 `Tests run: 2, Failures: 0, Errors: 0, Skipped: 0`。
+- 临时 MySQL 从空库成功应用 Flyway V1～V12；第一项实跑购买成功、支付重放、逐层授权、一次性下载和重复 token；第二项实跑 Grant 与 DownloadAudit 两类失败回滚，以及同 token 重试。
+- 全仓严格门禁得到后端 `Tests run: 95, Failures: 0, Errors: 0, Skipped: 0`；前端 Prettier、TypeScript 和 Vite 生产构建、51 份 Markdown 相对链接及 Git 空白检查同时通过。
+- 测试连接的是临时 `meteor_test` 容器库，结束后由 Testcontainers 清理；没有连接或改动本机 `meteor` 业务数据库。
 
-因此当前简历和面试只能说“已接入 Testcontainers 测试代码，等待 Docker 环境修复后完成运行验证”。修复并得到 `Skipped: 0` 后，才能改为“使用 Testcontainers 验证真实 MySQL 迁移和事务回滚”。
+因此现在可以准确表述为“使用 Testcontainers 和真实 MySQL 8.0.36 验证 Flyway V1～V12、购买到下载成功链，以及支付／下载事务回滚”。不能扩大成真实支付、生产对象存储、部署或高并发验证。
 
 ## 8. 一键质量门禁
 
@@ -505,7 +508,7 @@ Tests run: 2, Failures: 0, Errors: 0, Skipped: 2
 4. 检查仓库 Markdown 的相对链接；
 5. 执行 `git diff --check`，拦截本次差异中的空白错误。
 
-普通模式允许 Docker 不可用的电脑继续做其他开发，但会打印 `skipped=2` 警告。此时可以说明 93 项非容器测试通过，不能说明 Testcontainers 通过。
+普通模式允许 Docker 不可用的电脑继续做其他开发，但会打印容器测试跳过警告。出现该警告时，只能报告实际执行的非容器测试，不能沿用本机这次 `Skipped: 0` 证据说明当前环境也跑过容器。
 
 Docker 可用后运行严格模式：
 
@@ -513,7 +516,7 @@ Docker 可用后运行严格模式：
 .\scripts\verify.ps1 -RequireContainers
 ```
 
-严格模式单独读取 `PurchaseFlowMySqlIntegrationTest` 的报告，要求 `tests=2` 且 `skipped=0`。当前机器的实际结果是命令按设计失败并报告 `expected tests=2 and skipped=0, got tests=2 and skipped=2`。这项失败是正确的质量门槛，不是新的业务回归。
+严格模式单独读取 `PurchaseFlowMySqlIntegrationTest` 的报告，要求 `tests=2` 且 `skipped=0`。2026-10-04 本机实际结果为 `tests=2, skipped=0`，随后前端和文档检查也全部完成，命令退出码为 0。
 
 Maven Wrapper 固定构建工具版本，Java 21 仍需由电脑或 CI 提供。Wrapper 第一次运行要下载 Maven，不能把它理解为把 JDK 和所有依赖都存进仓库。
 
@@ -543,11 +546,11 @@ Maven Wrapper 固定构建工具版本，Java 21 仍需由电脑或 CI 提供。
 
 答：
 
-> 还不能。本机 Docker Desktop 当前启动崩溃，Maven 报告 93 项非容器测试通过、2 项容器测试跳过。测试代码已经编译并进入测试发现；必须在 Docker 可用环境得到 2 项执行、0 跳过后，才能把它列为已验证证据。
+> 可以，但要带上范围：本机已用 Testcontainers 启动 MySQL 8.0.36，2 项集成测试实际执行且 0 跳过，验证了 V1～V12、购买和下载链、Grant 与 DownloadAudit 失败回滚。它没有经过真实支付商、生产对象存储或部署环境。
 
 ### 下一步 CI 应做什么
 
-Docker 环境修复后先完成本机 2 项测试，再添加 CI：
+本机 2 项测试已经完成，下一步在确认实际代码托管平台后添加 CI：
 
 1. 使用 Java 21；
 2. 缓存 Maven 依赖；
@@ -573,6 +576,6 @@ Docker 环境修复后先完成本机 2 项测试，再添加 CI：
 - [ ] 能区分 `Failures: 0` 与 `Skipped: 2`。
 - [ ] 能解释普通门禁为何警告跳过、严格门禁为何直接失败。
 - [ ] 能说出 Maven Wrapper 固定了什么、仍未提供什么。
-- [ ] 当前不会把尚未运行的容器测试写成已经通过。
+- [ ] 不会把“本机 2 项真实 MySQL 测试通过”扩大成生产数据库、真实支付或高并发验证。
 
-下一次从这里继续：先修复或升级 Docker Desktop，使 `docker version` 返回 Server；随后运行本课两项测试。通过后更新本课、[项目首页](README.md)和[学习执行日志](08-学习执行日志.md)中的验证状态，再进入 CI。
+下一次从这里继续：先亲手运行一次 `scripts\verify.ps1 -RequireContainers` 并打开 Surefire 报告定位这 2 项测试；能够解释成功链和两类回滚后，再按实际代码托管平台接入 CI。

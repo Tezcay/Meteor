@@ -36,6 +36,9 @@ class PurchaseFlowMySqlIntegrationTest {
     @Container
     @ServiceConnection
     private static final MySQLContainer MYSQL = new MySQLContainer("mysql:8.0.36")
+            // Test-only: the application user needs to create failure-injection triggers.
+            // Production does not enable this MySQL option or create triggers at runtime.
+            .withCommand("--log-bin-trust-function-creators=1")
             .withDatabaseName("meteor_test")
             .withUsername("meteor_test")
             .withPassword("meteor_test");
