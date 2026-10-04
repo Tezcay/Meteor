@@ -106,6 +106,21 @@ class OrderControllerWebTest {
     }
 
     @Test
+    void rejectsMalformedJsonWithStableErrorResponse() throws Exception {
+        mockMvc.perform(post(ORDERS_PATH)
+                        .with(user(principal()))
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"productId\":101,"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ARGUMENT"))
+                .andExpect(jsonPath("$.message").value("Request body is malformed"))
+                .andExpect(jsonPath("$.timestamp").isString());
+
+        verifyNoInteractions(orderService);
+    }
+
+    @Test
     void createsOrderForCurrentUserAndReturnsSnapshot() throws Exception {
         CreateOrderRequest normalizedRequest = new CreateOrderRequest(PRODUCT_ID, PACKAGE_ID, "checkout-001");
         when(orderService.createOrder(USER_ID, normalizedRequest)).thenReturn(new OrderResponse(

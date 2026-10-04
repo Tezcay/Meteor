@@ -13,11 +13,13 @@ import dev.meteor.payment.service.PaymentOrderNotFoundException;
 import dev.meteor.product.service.ProductNotFoundException;
 import java.time.Instant;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -92,6 +94,22 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiErrorResponse handleIllegalArgument(IllegalArgumentException exception) {
         return new ApiErrorResponse("INVALID_ARGUMENT", exception.getMessage(), Instant.now());
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiErrorResponse handleUnreadableRequestBody(HttpMessageNotReadableException exception) {
+        return new ApiErrorResponse("INVALID_ARGUMENT", "Request body is malformed", Instant.now());
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ApiErrorResponse handleArgumentTypeMismatch(MethodArgumentTypeMismatchException exception) {
+        return new ApiErrorResponse(
+                "INVALID_ARGUMENT",
+                "Request parameter or path variable has an invalid type",
+                Instant.now()
+        );
     }
 
     @ExceptionHandler(AuthenticationException.class)

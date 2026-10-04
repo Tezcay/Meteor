@@ -118,4 +118,14 @@ class ProductControllerWebTest {
                 .andExpect(jsonPath("$.code").value("INVALID_ARGUMENT"))
                 .andExpect(jsonPath("$.message").value("query must not exceed 100 characters"));
     }
+
+    @Test
+    void mapsInvalidPathVariableTypeToStableBadRequest() throws Exception {
+        mockMvc.perform(get("/api/products/not-a-number"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_ARGUMENT"))
+                .andExpect(jsonPath("$.message")
+                        .value("Request parameter or path variable has an invalid type"))
+                .andExpect(jsonPath("$.timestamp").isString());
+    }
 }
