@@ -106,16 +106,9 @@ class DownloadServiceTest {
 
     @Test
     void rejectsStoredFileWhenTrustedSizeOrHashDoesNotMatch() {
-        mapper.file = Optional.of(new DownloadableFileProjection(
-                5001L,
-                3001L,
-                4001L,
-                6001L,
-                5001L,
+        mapper.file = Optional.of(file(
                 "CLASSPATH",
                 "delivery-fixtures/basic/resume-template.html",
-                "basic-resume-template.html",
-                "text/html",
                 635L,
                 FILE_HASH
         ));
@@ -128,19 +121,62 @@ class DownloadServiceTest {
         assertThat(mapper.audit).isNull();
     }
 
+    @Test
+    void rejectsUnsupportedStorageProviderBeforeConsumingTicket() {
+        mapper.file = Optional.of(file("OBJECT_STORAGE", "private/file.html", 634L, FILE_HASH));
+        mapper.ticketProjection = Optional.of(ticket(DownloadTicketStatus.ISSUED, NOW.plusSeconds(60), null));
+
+        assertThatThrownBy(() -> service.consume(2L, "unsupported-storage-token"))
+                .isInstanceOf(DownloadStorageException.class);
+
+        assertThat(mapper.markConsumedCalls).isZero();
+        assertThat(mapper.audit).isNull();
+    }
+
+    @Test
+    void rejectsMissingClasspathFileBeforeConsumingTicket() {
+        mapper.file = Optional.of(file(
+                "CLASSPATH",
+                "delivery-fixtures/missing-file.html",
+                634L,
+                FILE_HASH
+        ));
+        mapper.ticketProjection = Optional.of(ticket(DownloadTicketStatus.ISSUED, NOW.plusSeconds(60), null));
+
+        assertThatThrownBy(() -> service.consume(2L, "missing-file-token"))
+                .isInstanceOf(DownloadStorageException.class);
+
+        assertThat(mapper.markConsumedCalls).isZero();
+        assertThat(mapper.audit).isNull();
+    }
+
     private static DownloadableFileProjection file() {
+        return file(
+                "CLASSPATH",
+                "delivery-fixtures/basic/resume-template.html",
+                634L,
+                FILE_HASH
+        );
+    }
+
+    private static DownloadableFileProjection file(
+            String storageProvider,
+            String storageKey,
+            long sizeBytes,
+            String contentSha256
+    ) {
         return new DownloadableFileProjection(
                 5001L,
                 3001L,
                 4001L,
                 6001L,
                 5001L,
-                "CLASSPATH",
-                "delivery-fixtures/basic/resume-template.html",
+                storageProvider,
+                storageKey,
                 "basic-resume-template.html",
                 "text/html",
-                634L,
-                FILE_HASH
+                sizeBytes,
+                contentSha256
         );
     }
 

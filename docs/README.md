@@ -51,7 +51,7 @@ flowchart LR
 | 可重复验证 | 本地一键门禁已完成，托管 CI 未做 | Maven Wrapper、前端格式／构建、链接和空白检查 |
 | 请求追踪 | 已完成单服务请求编号、错误关联和完成日志 | `X-Request-Id`、MDC、错误 JSON；未接集中日志或分布式追踪 |
 
-当前自动化结果是：后端 91 项被发现，89 项非容器测试执行通过，2 项 Testcontainers 因 Docker 不可用而跳过；前端 Prettier、TypeScript 和生产构建通过。401／403、业务异常、残缺 JSON 和错误路径参数均使用稳定的错误 JSON 契约，并与响应头、完成日志共享 `requestId`。`scripts/verify.ps1 -RequireContainers` 会把容器测试跳过判为失败，因此当前不能在简历中写“Testcontainers 已跑通”。
+当前自动化结果是：后端 95 项被发现，93 项非容器测试执行通过，2 项 Testcontainers 因 Docker 不可用而跳过；前端 Prettier、TypeScript 和生产构建通过。401／403、业务异常、残缺 JSON 和错误路径参数均使用稳定的错误 JSON 契约，并与响应头、完成日志共享 `requestId`。`scripts/verify.ps1 -RequireContainers` 会把容器测试跳过判为失败，因此当前不能在简历中写“Testcontainers 已跑通”。
 
 ## 七节学习主线
 

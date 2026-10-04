@@ -33,14 +33,42 @@ public class DownloadController {
     ) {
         DownloadFilePayload file = downloadService.consume(principal.id(), token);
         ContentDisposition disposition = ContentDisposition.attachment()
-                .filename(file.filename(), StandardCharsets.UTF_8)
+                .filename(safeFilename(file.filename()), StandardCharsets.UTF_8)
                 .build();
         return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType(file.mediaType()))
+                .contentType(safeMediaType(file.mediaType()))
                 .contentLength(file.sizeBytes())
                 .cacheControl(CacheControl.noStore())
                 .header(HttpHeaders.CONTENT_DISPOSITION, disposition.toString())
                 .header("X-Content-SHA256", file.sha256())
                 .body(file.resource());
+    }
+
+    private static String safeFilename(String filename) {
+        if (filename == null || filename.isBlank()) {
+            return "download";
+        }
+        StringBuilder sanitized = new StringBuilder(filename.length());
+        for (int index = 0; index < filename.length(); index++) {
+            char current = filename.charAt(index);
+            if (Character.isISOControl(current) || current == '/' || current == '\\') {
+                sanitized.append('_');
+            } else {
+                sanitized.append(current);
+            }
+        }
+        String value = sanitized.toString().trim();
+        return value.isEmpty() ? "download" : value;
+    }
+
+    private static MediaType safeMediaType(String mediaType) {
+        if (mediaType == null || mediaType.isBlank()) {
+            return MediaType.APPLICATION_OCTET_STREAM;
+        }
+        try {
+            return MediaType.parseMediaType(mediaType);
+        } catch (IllegalArgumentException exception) {
+            return MediaType.APPLICATION_OCTET_STREAM;
+        }
     }
 }

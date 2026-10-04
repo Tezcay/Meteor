@@ -1,5 +1,6 @@
 package dev.meteor.download.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -30,6 +31,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 @WebMvcTest({DownloadAuthorizationController.class, DownloadController.class})
 @ContextConfiguration(classes = {
@@ -116,6 +118,47 @@ class DownloadControllerWebTest {
                 ));
 
         verify(downloadService).consume(USER_ID, TOKEN);
+    }
+
+    @Test
+    void sanitizesUnsafeFilenameWithoutCreatingInjectedHeader() throws Exception {
+        byte[] body = "safe-body".getBytes(StandardCharsets.UTF_8);
+        when(downloadService.consume(USER_ID, TOKEN)).thenReturn(new DownloadFilePayload(
+                "report\r\nX-Injected: yes.txt",
+                "text/plain",
+                "abc123",
+                body.length,
+                new ByteArrayResource(body)
+        ));
+
+        MvcResult result = mockMvc.perform(get("/api/downloads/{token}", TOKEN)
+                        .with(user(principal())))
+                .andExpect(status().isOk())
+                .andExpect(content().bytes(body))
+                .andReturn();
+
+        assertThat(result.getResponse().getHeader(HttpHeaders.CONTENT_DISPOSITION))
+                .isNotNull()
+                .doesNotContain("\r", "\n");
+        assertThat(result.getResponse().getHeader("X-Injected")).isNull();
+    }
+
+    @Test
+    void fallsBackToBinaryMediaTypeWhenStoredMetadataIsInvalid() throws Exception {
+        byte[] body = "safe-body".getBytes(StandardCharsets.UTF_8);
+        when(downloadService.consume(USER_ID, TOKEN)).thenReturn(new DownloadFilePayload(
+                "download.bin",
+                "invalid media type",
+                "abc123",
+                body.length,
+                new ByteArrayResource(body)
+        ));
+
+        mockMvc.perform(get("/api/downloads/{token}", TOKEN)
+                        .with(user(principal())))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType("application/octet-stream"))
+                .andExpect(content().bytes(body));
     }
 
     @Test
