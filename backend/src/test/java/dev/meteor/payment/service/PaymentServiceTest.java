@@ -19,9 +19,12 @@ import dev.meteor.payment.mapper.param.PaymentAttemptInsert;
 import dev.meteor.payment.mapper.param.PaymentEventInsert;
 import dev.meteor.payment.mapper.projection.PaymentAttemptProjection;
 import dev.meteor.payment.mapper.projection.PaymentEventProjection;
+import dev.meteor.payment.model.PaymentAttemptStatus;
+import dev.meteor.payment.model.PaymentEventProcessingStatus;
+import dev.meteor.payment.model.PaymentEventType;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
-import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 class PaymentServiceTest {
@@ -42,7 +45,7 @@ class PaymentServiceTest {
         );
 
         assertThat(result.eventId()).isEqualTo(4001L);
-        assertThat(result.processingStatus()).isEqualTo("APPLIED");
+        assertThat(result.processingStatus()).isEqualTo(PaymentEventProcessingStatus.APPLIED);
         assertThat(result.orderStatus()).isEqualTo(OrderStatus.PAID);
         assertThat(paymentMapper.insertAttemptCalls).isEqualTo(1);
         assertThat(paymentMapper.insertEventCalls).isEqualTo(1);
@@ -57,7 +60,8 @@ class PaymentServiceTest {
         orderMapper.order = Optional.of(order(OrderStatus.PAID));
         paymentMapper.eventByEventId = Optional.of(event("evt-001", "txn-001"));
         paymentMapper.attemptByTransaction = Optional.of(new PaymentAttemptProjection(
-                3001L, 7001L, PaymentService.PROVIDER, "txn-001", "SUCCEEDED", 1900L, "CNY"
+                3001L, 7001L, PaymentService.PROVIDER, "txn-001",
+                PaymentAttemptStatus.SUCCEEDED, 1900L, "CNY"
         ));
 
         PaymentResponse result = paymentService.applyTestPayment(
@@ -79,7 +83,8 @@ class PaymentServiceTest {
         orderMapper.order = Optional.of(order(OrderStatus.PAID));
         paymentMapper.eventByEventId = Optional.of(event("evt-001", "txn-original"));
         paymentMapper.attemptByTransaction = Optional.of(new PaymentAttemptProjection(
-                3001L, 7001L, PaymentService.PROVIDER, "txn-original", "SUCCEEDED", 1900L, "CNY"
+                3001L, 7001L, PaymentService.PROVIDER, "txn-original",
+                PaymentAttemptStatus.SUCCEEDED, 1900L, "CNY"
         ));
 
         assertThatThrownBy(() -> paymentService.applyTestPayment(
@@ -99,12 +104,14 @@ class PaymentServiceTest {
                 PaymentService.PROVIDER,
                 "evt-rejected",
                 "txn-rejected",
-                "REJECTED",
+                PaymentEventType.PAYMENT_SUCCEEDED,
+                PaymentEventProcessingStatus.REJECTED,
                 1900L,
                 "CNY"
         ));
         paymentMapper.attemptByTransaction = Optional.of(new PaymentAttemptProjection(
-                3001L, 7001L, PaymentService.PROVIDER, "txn-rejected", "FAILED", 1900L, "CNY"
+                3001L, 7001L, PaymentService.PROVIDER, "txn-rejected",
+                PaymentAttemptStatus.FAILED, 1900L, "CNY"
         ));
 
         assertThatThrownBy(() -> paymentService.applyTestPayment(
@@ -121,7 +128,8 @@ class PaymentServiceTest {
         orderMapper.order = Optional.of(order(OrderStatus.PAID));
         paymentMapper.eventByTransactionId = Optional.of(event("evt-original", "txn-001"));
         paymentMapper.attemptByTransaction = Optional.of(new PaymentAttemptProjection(
-                3001L, 7001L, PaymentService.PROVIDER, "txn-001", "SUCCEEDED", 1900L, "CNY"
+                3001L, 7001L, PaymentService.PROVIDER, "txn-001",
+                PaymentAttemptStatus.SUCCEEDED, 1900L, "CNY"
         ));
 
         PaymentResponse result = paymentService.applyTestPayment(
@@ -152,7 +160,8 @@ class PaymentServiceTest {
     void rejectsDifferentTransactionForAnExistingAttempt() {
         orderMapper.order = Optional.of(order(OrderStatus.PENDING_PAYMENT));
         paymentMapper.attemptByOrder = Optional.of(new PaymentAttemptProjection(
-                3001L, 7001L, PaymentService.PROVIDER, "txn-existing", "PENDING", 1900L, "CNY"
+                3001L, 7001L, PaymentService.PROVIDER, "txn-existing",
+                PaymentAttemptStatus.PENDING, 1900L, "CNY"
         ));
 
         assertThatThrownBy(() -> paymentService.applyTestPayment(
@@ -175,6 +184,24 @@ class PaymentServiceTest {
         )).isInstanceOf(PaymentConflictException.class)
                 .hasMessageContaining("already PAID");
         assertThat(paymentMapper.insertAttemptCalls).isZero();
+    }
+
+    @Test
+    void rejectsNewEventWhenExistingAttemptAlreadySucceeded() {
+        orderMapper.order = Optional.of(order(OrderStatus.PENDING_PAYMENT));
+        paymentMapper.attemptByOrder = Optional.of(new PaymentAttemptProjection(
+                3001L, 7001L, PaymentService.PROVIDER, "txn-existing",
+                PaymentAttemptStatus.SUCCEEDED, 1900L, "CNY"
+        ));
+
+        assertThatThrownBy(() -> paymentService.applyTestPayment(
+                2L,
+                7001L,
+                new TestPaymentEventRequest("evt-new", "txn-existing", 1900L, "CNY")
+        )).isInstanceOf(PaymentConflictException.class)
+                .hasMessageContaining("already SUCCEEDED");
+        assertThat(paymentMapper.insertEventCalls).isZero();
+        assertThat(orderMapper.markPaidCalls).isZero();
     }
 
     @Test
@@ -215,7 +242,8 @@ class PaymentServiceTest {
                 PaymentService.PROVIDER,
                 eventId,
                 transactionId,
-                "APPLIED",
+                PaymentEventType.PAYMENT_SUCCEEDED,
+                PaymentEventProcessingStatus.APPLIED,
                 1900L,
                 "CNY"
         );

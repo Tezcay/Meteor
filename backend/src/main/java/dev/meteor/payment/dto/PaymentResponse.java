@@ -1,13 +1,14 @@
 package dev.meteor.payment.dto;
 
 import dev.meteor.order.model.OrderStatus;
+import dev.meteor.payment.model.PaymentEventProcessingStatus;
 
 public record PaymentResponse(
         long eventId,
         String provider,
         String providerEventId,
         String providerTransactionId,
-        String processingStatus,
+        PaymentEventProcessingStatus processingStatus,
         long orderId,
         OrderStatus orderStatus,
         long amountCents,

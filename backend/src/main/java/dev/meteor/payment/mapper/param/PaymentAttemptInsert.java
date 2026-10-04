@@ -1,12 +1,14 @@
 package dev.meteor.payment.mapper.param;
 
+import dev.meteor.payment.model.PaymentAttemptStatus;
+
 public final class PaymentAttemptInsert {
 
     private long id;
     private final long orderId;
     private final String provider;
     private final String providerTransactionId;
-    private final String status;
+    private final PaymentAttemptStatus status;
     private final long amountCents;
     private final String currency;
 
@@ -14,7 +16,7 @@ public final class PaymentAttemptInsert {
             long orderId,
             String provider,
             String providerTransactionId,
-            String status,
+            PaymentAttemptStatus status,
             long amountCents,
             String currency
     ) {
@@ -46,7 +48,7 @@ public final class PaymentAttemptInsert {
         return providerTransactionId;
     }
 
-    public String getStatus() {
+    public PaymentAttemptStatus getStatus() {
         return status;
     }
 

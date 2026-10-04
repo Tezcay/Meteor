@@ -1,5 +1,8 @@
 package dev.meteor.payment.mapper.param;
 
+import dev.meteor.payment.model.PaymentEventProcessingStatus;
+import dev.meteor.payment.model.PaymentEventType;
+
 public final class PaymentEventInsert {
 
     private long id;
@@ -7,20 +10,20 @@ public final class PaymentEventInsert {
     private final String provider;
     private final String providerEventId;
     private final String providerTransactionId;
-    private final String eventType;
+    private final PaymentEventType eventType;
     private final long amountCents;
     private final String currency;
-    private final String processingStatus;
+    private final PaymentEventProcessingStatus processingStatus;
 
     public PaymentEventInsert(
             long paymentAttemptId,
             String provider,
             String providerEventId,
             String providerTransactionId,
-            String eventType,
+            PaymentEventType eventType,
             long amountCents,
             String currency,
-            String processingStatus
+            PaymentEventProcessingStatus processingStatus
     ) {
         this.paymentAttemptId = paymentAttemptId;
         this.provider = provider;
@@ -56,7 +59,7 @@ public final class PaymentEventInsert {
         return providerTransactionId;
     }
 
-    public String getEventType() {
+    public PaymentEventType getEventType() {
         return eventType;
     }
 
@@ -68,7 +71,7 @@ public final class PaymentEventInsert {
         return currency;
     }
 
-    public String getProcessingStatus() {
+    public PaymentEventProcessingStatus getProcessingStatus() {
         return processingStatus;
     }
 }

@@ -12,6 +12,9 @@ import dev.meteor.payment.mapper.param.PaymentAttemptInsert;
 import dev.meteor.payment.mapper.param.PaymentEventInsert;
 import dev.meteor.payment.mapper.projection.PaymentAttemptProjection;
 import dev.meteor.payment.mapper.projection.PaymentEventProjection;
+import dev.meteor.payment.model.PaymentAttemptStatus;
+import dev.meteor.payment.model.PaymentEventProcessingStatus;
+import dev.meteor.payment.model.PaymentEventType;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,7 +23,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class PaymentService {
 
     public static final String PROVIDER = "LOCAL_TEST";
-    private static final String EVENT_TYPE = "PAYMENT_SUCCEEDED";
 
     private final OrderMapper orderMapper;
     private final PaymentMapper paymentMapper;
@@ -96,7 +98,7 @@ public class PaymentService {
                         "Order " + orderId + " already has a different payment transaction"
                 );
             }
-            if (!"PENDING".equals(attempt.status())) {
+            if (!attempt.status().acceptsSuccess()) {
                 throw new PaymentConflictException("Payment attempt is already " + attempt.status());
             }
         } else {
@@ -104,7 +106,7 @@ public class PaymentService {
                     orderId,
                     PROVIDER,
                     request.providerTransactionId(),
-                    "PENDING",
+                    PaymentAttemptStatus.PENDING,
                     order.totalAmountCents(),
                     order.currency()
             );
@@ -126,7 +128,7 @@ public class PaymentService {
                     orderId,
                     PROVIDER,
                     request.providerTransactionId(),
-                    "PENDING",
+                    PaymentAttemptStatus.PENDING,
                     order.totalAmountCents(),
                     order.currency()
             );
@@ -137,10 +139,10 @@ public class PaymentService {
                 PROVIDER,
                 request.providerEventId(),
                 request.providerTransactionId(),
-                EVENT_TYPE,
+                PaymentEventType.PAYMENT_SUCCEEDED,
                 request.amountCents(),
                 request.currency(),
-                "APPLIED"
+                PaymentEventProcessingStatus.APPLIED
         );
         try {
             paymentMapper.insertEvent(event);
@@ -161,7 +163,7 @@ public class PaymentService {
                 PROVIDER,
                 request.providerEventId(),
                 request.providerTransactionId(),
-                "APPLIED",
+                PaymentEventProcessingStatus.APPLIED,
                 orderId,
                 OrderStatus.PAID,
                 request.amountCents(),
@@ -201,7 +203,9 @@ public class PaymentService {
             PaymentEventProjection event,
             PaymentAttemptProjection attempt
     ) {
-        if (!"APPLIED".equals(event.processingStatus()) || !"SUCCEEDED".equals(attempt.status())) {
+        if (event.eventType() != PaymentEventType.PAYMENT_SUCCEEDED
+                || !event.processingStatus().wasApplied()
+                || !attempt.status().hasSucceeded()) {
             throw new PaymentConflictException("Payment event was not successfully applied");
         }
     }

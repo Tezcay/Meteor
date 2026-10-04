@@ -1,13 +1,16 @@
 import { apiPost } from './http'
+import type { OrderStatus } from './orders'
+
+export type PaymentEventProcessingStatus = 'APPLIED' | 'IGNORED' | 'REJECTED'
 
 export type PaymentResponse = {
   eventId: number
   provider: string
   providerEventId: string
   providerTransactionId: string
-  processingStatus: string
+  processingStatus: PaymentEventProcessingStatus
   orderId: number
-  orderStatus: string
+  orderStatus: OrderStatus
   amountCents: number
   currency: string
   entitlementGrantId: number | null

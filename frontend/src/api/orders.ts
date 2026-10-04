@@ -1,8 +1,10 @@
 import { apiGet, apiPost } from './http'
 
+export type OrderStatus = 'PENDING_PAYMENT' | 'PAID' | 'CLOSED' | 'REFUNDED'
+
 export type OrderResponse = {
   id: number
-  status: 'PENDING_PAYMENT' | 'PAID' | 'CLOSED' | 'REFUNDED'
+  status: OrderStatus
   totalAmountCents: number
   currency: string
   idempotencyKey: string
@@ -16,7 +18,7 @@ export type OrderResponse = {
 
 export type OrderDetailResponse = {
   id: number
-  status: 'PENDING_PAYMENT' | 'PAID' | 'CLOSED' | 'REFUNDED'
+  status: OrderStatus
   totalAmountCents: number
   currency: string
   createdAt: string

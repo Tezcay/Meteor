@@ -49,6 +49,7 @@ public interface PaymentMapper {
                    provider,
                    provider_event_id,
                    provider_transaction_id,
+                   event_type,
                    processing_status,
                    amount_cents,
                    currency
@@ -67,6 +68,7 @@ public interface PaymentMapper {
                    provider,
                    provider_event_id,
                    provider_transaction_id,
+                   event_type,
                    processing_status,
                    amount_cents,
                    currency
