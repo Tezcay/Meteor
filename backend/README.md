@@ -52,7 +52,7 @@ Vue 前端 frontend/（Vite 开发服务器）
   → download_audits 记录 FILE_RESPONSE_PREPARED
 ```
 
-顶层业务模块现在包括 `product`、`auth`、`order`、`payment`、`entitlement`、`delivery`、`download`；每个模块内部再使用熟悉的 `controller`、`service`、`mapper`、`dto`。跨模块的 HTTP 错误响应集中在 `web.error`，不再错误归属于 `product`。这样既能按业务聚合，又不会把整个项目的所有 Controller、Service、Mapper 混在巨大的同名目录中。
+顶层业务模块现在包括 `product`、`auth`、`order`、`payment`、`entitlement`、`delivery`、`download`；每个模块内部再使用熟悉的 `controller`、`service`、`mapper`、`dto`。跨模块的 HTTP 错误响应集中在 `web.error`，请求编号和完成日志集中在 `web.request`。这样既能按业务聚合，又不会把整个项目的所有 Controller、Service、Mapper 混在巨大的同名目录中。
 
 必须看懂的文件：
 
@@ -110,7 +110,7 @@ E:\VibeCoding\Meteor\scripts\mysql\bootstrap-local.sql
 
 首次运行会从 Maven Central 下载该版本 Maven。`mvn-local.ps1` 只用于当前电脑上排查 IntelliJ Maven／JDK 路径问题，不是跨机器构建入口。
 
-现有 86 项非容器测试覆盖公开商品列表／详情的 HTTP 契约、数据库账号加载、订单核价与幂等、统一错误 JSON、订单 HTTP 认证／CSRF／校验／错误契约、OrderMapper XML 映射契约、测试支付事件、状态转移、金额校验与 HTTP 开关／认证／CSRF 契约、权益发放、内容库／Release／Manifest 的当前用户与资源隐藏契约、下载票据签发与一次性消费、文件完整性，以及登录、Session 和下载响应头的 Web 行为。
+现有 89 项非容器测试覆盖公开商品列表／详情的 HTTP 契约、数据库账号加载、订单核价与幂等、统一错误 JSON、请求编号校验／MDC 清理／下载 token 日志遮蔽、订单 HTTP 认证／CSRF／校验／错误契约、OrderMapper XML 映射契约、测试支付事件、状态转移、金额校验与 HTTP 开关／认证／CSRF 契约、权益发放、内容库／Release／Manifest 的当前用户与资源隐藏契约、下载票据签发与一次性消费、文件完整性，以及登录、Session 和下载响应头的 Web 行为。
 
 `PurchaseFlowMySqlIntegrationTest` 另外定义 2 项 Testcontainers 测试：临时 MySQL 从空库执行 Flyway V1～V12，再使用真实 MyBatis Mapper 验证下单／支付／权益幂等链，以及 Grant 插入失败时的事务回滚。Docker 可用时可单独执行：
 
@@ -118,7 +118,7 @@ E:\VibeCoding\Meteor\scripts\mysql\bootstrap-local.sql
 .\mvnw.cmd -Dtest=PurchaseFlowMySqlIntegrationTest test
 ```
 
-真正通过时报告必须为 `Tests run: 2, Skipped: 0`。2026-10-04 本机 Docker Desktop 因遗留 `dockerInference` socket 启动崩溃；当前全量报告是 88 项被发现、86 项通过、2 项跳过。测试代码已编译，不等于容器测试已验证。修复方法和逐行解释见[第七课](../docs/25-第七课-Testcontainers真实MySQL集成测试-V1.0.md)。
+真正通过时报告必须为 `Tests run: 2, Skipped: 0`。2026-10-04 本机 Docker Desktop 因遗留 `dockerInference` socket 启动崩溃；当前全量报告是 91 项被发现、89 项通过、2 项跳过。测试代码已编译，不等于容器测试已验证。修复方法和逐行解释见[第七课](../docs/25-第七课-Testcontainers真实MySQL集成测试-V1.0.md)。
 
 项目编译目标为 Java 21。仓库根目录的 `scripts/verify.ps1` 会统一执行 Wrapper 后端测试、前端格式与构建、文档链接和 Git 空白检查；Docker 可用后追加 `-RequireContainers`，如果这两项集成测试被跳过，命令会失败。
 

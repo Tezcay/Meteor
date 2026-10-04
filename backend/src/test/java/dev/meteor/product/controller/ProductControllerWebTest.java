@@ -3,6 +3,7 @@ package dev.meteor.product.controller;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -13,6 +14,7 @@ import dev.meteor.product.dto.ProductListItemResponse;
 import dev.meteor.product.service.ProductNotFoundException;
 import dev.meteor.product.service.ProductQueryService;
 import dev.meteor.web.error.GlobalExceptionHandler;
+import dev.meteor.web.request.RequestCorrelationFilter;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -103,9 +105,12 @@ class ProductControllerWebTest {
         when(productQueryService.getPublishedProduct(PRODUCT_ID))
                 .thenThrow(new ProductNotFoundException(PRODUCT_ID));
 
-        mockMvc.perform(get("/api/products/{productId}", PRODUCT_ID))
+        mockMvc.perform(get("/api/products/{productId}", PRODUCT_ID)
+                        .header(RequestCorrelationFilter.HEADER_NAME, "product-not-found-001"))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.code").value("PRODUCT_NOT_FOUND"));
+                .andExpect(header().string(RequestCorrelationFilter.HEADER_NAME, "product-not-found-001"))
+                .andExpect(jsonPath("$.code").value("PRODUCT_NOT_FOUND"))
+                .andExpect(jsonPath("$.requestId").value("product-not-found-001"));
     }
 
     @Test

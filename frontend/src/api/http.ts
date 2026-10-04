@@ -9,21 +9,27 @@ type CsrfTokenResponse = {
 let csrfToken: CsrfTokenResponse | null = null
 
 async function readError(response: Response) {
+  const responseRequestId = response.headers.get('X-Request-Id') ?? undefined
   try {
-    const body = (await response.json()) as { code?: string; message?: string }
+    const body = (await response.json()) as { code?: string; message?: string; requestId?: string }
     return {
       code: body.code ?? 'REQUEST_FAILED',
       message: body.message ?? `请求失败（${response.status}）`,
+      requestId: body.requestId ?? responseRequestId,
     }
   } catch {
-    return { code: 'REQUEST_FAILED', message: `请求失败（${response.status}）` }
+    return {
+      code: 'REQUEST_FAILED',
+      message: `请求失败（${response.status}）`,
+      requestId: responseRequestId,
+    }
   }
 }
 
 export async function ensureOk(response: Response) {
   if (response.ok) return
   const error = await readError(response)
-  throw new ApiError(response.status, error.code, error.message)
+  throw new ApiError(response.status, error.code, error.message, error.requestId)
 }
 
 export function clearCsrfToken() {

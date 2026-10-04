@@ -1,6 +1,8 @@
 package dev.meteor.auth.security;
 
 import dev.meteor.web.error.ApiErrorResponse;
+import dev.meteor.web.request.RequestCorrelationFilter;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.time.Instant;
@@ -18,6 +20,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.authentication.session.ChangeSessionIdAuthenticationStrategy;
 import org.springframework.security.web.authentication.session.CompositeSessionAuthenticationStrategy;
 import org.springframework.security.web.authentication.session.SessionAuthenticationStrategy;
@@ -76,6 +79,7 @@ public class SecurityConfig {
         CsrfTokenRequestAttributeHandler csrfRequestHandler = new CsrfTokenRequestAttributeHandler();
 
         http
+                .addFilterBefore(new RequestCorrelationFilter(), SecurityContextHolderFilter.class)
                 .securityContext(context -> context.securityContextRepository(securityContextRepository))
                 .csrf(csrf -> csrf
                         .csrfTokenRepository(csrfTokenRepository)
@@ -107,10 +111,10 @@ public class SecurityConfig {
                                 response.setStatus(HttpServletResponse.SC_NO_CONTENT)))
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint((request, response, exception) ->
-                                writeError(objectMapper, response, HttpServletResponse.SC_UNAUTHORIZED,
+                                writeError(objectMapper, request, response, HttpServletResponse.SC_UNAUTHORIZED,
                                         "UNAUTHORIZED", "Authentication is required"))
                         .accessDeniedHandler((request, response, exception) ->
-                                writeError(objectMapper, response, HttpServletResponse.SC_FORBIDDEN,
+                                writeError(objectMapper, request, response, HttpServletResponse.SC_FORBIDDEN,
                                         "FORBIDDEN", "Access is denied")))
                 .cors(Customizer.withDefaults());
 
@@ -119,6 +123,7 @@ public class SecurityConfig {
 
     private static void writeError(
             ObjectMapper objectMapper,
+            HttpServletRequest request,
             HttpServletResponse response,
             int status,
             String code,
@@ -127,6 +132,11 @@ public class SecurityConfig {
         response.setStatus(status);
         response.setCharacterEncoding("UTF-8");
         response.setContentType("application/json");
-        objectMapper.writeValue(response.getWriter(), new ApiErrorResponse(code, message, Instant.now()));
+        objectMapper.writeValue(response.getWriter(), new ApiErrorResponse(
+                code,
+                message,
+                RequestCorrelationFilter.requestId(request),
+                Instant.now()
+        ));
     }
 }

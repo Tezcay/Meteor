@@ -5,6 +5,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -12,6 +13,7 @@ import dev.meteor.auth.security.DatabaseUserDetailsService;
 import dev.meteor.auth.security.MeteorUserPrincipal;
 import dev.meteor.auth.security.SecurityConfig;
 import dev.meteor.web.error.GlobalExceptionHandler;
+import dev.meteor.web.request.RequestCorrelationFilter;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -59,6 +61,7 @@ class AuthControllerWebTest {
     void issuesCsrfTokenWithoutAuthentication() throws Exception {
         mockMvc.perform(get("/api/auth/csrf"))
                 .andExpect(status().isOk())
+                .andExpect(header().exists(RequestCorrelationFilter.HEADER_NAME))
                 .andExpect(jsonPath("$.headerName").value("X-CSRF-TOKEN"))
                 .andExpect(jsonPath("$.token").isNotEmpty());
     }
@@ -66,14 +69,17 @@ class AuthControllerWebTest {
     @Test
     void rejectsLoginWithoutCsrfToken() throws Exception {
         mockMvc.perform(post("/api/auth/login")
+                        .header(RequestCorrelationFilter.HEADER_NAME, "login-forbidden-001")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"email":"buyer@meteor.local","password":"password"}
                                 """))
                 .andExpect(status().isForbidden())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
+                .andExpect(header().string(RequestCorrelationFilter.HEADER_NAME, "login-forbidden-001"))
                 .andExpect(jsonPath("$.code").value("FORBIDDEN"))
                 .andExpect(jsonPath("$.message").value("Access is denied"))
+                .andExpect(jsonPath("$.requestId").value("login-forbidden-001"))
                 .andExpect(jsonPath("$.timestamp").isString());
     }
 
@@ -113,6 +119,7 @@ class AuthControllerWebTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
                 .andExpect(jsonPath("$.message").value("Authentication is required"))
+                .andExpect(jsonPath("$.requestId").isString())
                 .andExpect(jsonPath("$.timestamp").isString());
     }
 }

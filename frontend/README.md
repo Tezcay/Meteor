@@ -38,7 +38,7 @@ Vite 将 `/api/*` 代理到 http://localhost:8080，无需为本地开发放开�
 
 内容库可按 Grant 展开对应套餐的正式 Release，再按 Release 展开冻结文件清单；数据来自 Release 和 Manifest 两个 GET 接口。权益卡、版本浏览和清单面板已拆成独立组件，并通过 keyed loader 隔离请求、取消过期请求和拒绝迟到响应。点击“下载文件”会先 POST 申请五分钟一次性凭证，再 GET 受控文件响应；界面提供忙碌、成功和失败播报，不接收或暴露 `storage_key`。
 
-登录页已接入后端 Session：本地设置 `METEOR_DEMO_ACCOUNTS_ENABLED=true` 后，可使用 `buyer@meteor.local` 或 `creator@meteor.local`，密码均为 `password`。生产构建不显示演示身份快捷选择，后端故障时路由也不会信任本地角色。统一 API Client 负责错误解析、CSRF token 缓存和单次 403 刷新重试。创作者入驻、作品发布、真实支付和生产对象存储仍未开放；当前下载只服务本地 Classpath 学习素材。
+登录页已接入后端 Session：本地设置 `METEOR_DEMO_ACCOUNTS_ENABLED=true` 后，可使用 `buyer@meteor.local` 或 `creator@meteor.local`，密码均为 `password`。生产构建不显示演示身份快捷选择，后端故障时路由也不会信任本地角色。统一 API Client 负责错误解析、请求编号、CSRF token 缓存和单次 403 刷新重试；后端返回 `requestId` 时，页面错误会附上可用于查日志的请求编号。创作者入驻、作品发布、真实支付和生产对象存储仍未开放；当前下载只服务本地 Classpath 学习素材。
 
 ## 验证
 

@@ -49,8 +49,9 @@ flowchart LR
 | 无障碍 | 核心路由完成一轮自动扫描和关键人工检查 | 11 路由 axe 0 违规、键盘、320px、减少动画 |
 | 数据库集成测试 | 代码已接入，真实容器运行待完成 | 2 项被 Maven 发现；Docker 不可用时跳过 |
 | 可重复验证 | 本地一键门禁已完成，托管 CI 未做 | Maven Wrapper、前端格式／构建、链接和空白检查 |
+| 请求追踪 | 已完成单服务请求编号、错误关联和完成日志 | `X-Request-Id`、MDC、错误 JSON；未接集中日志或分布式追踪 |
 
-当前自动化结果是：后端 88 项被发现，86 项非容器测试执行通过，2 项 Testcontainers 因 Docker 不可用而跳过；前端 Prettier、TypeScript 和生产构建通过。401／403、业务异常、残缺 JSON 和错误路径参数均使用稳定的错误 JSON 契约。`scripts/verify.ps1 -RequireContainers` 会把容器测试跳过判为失败，因此当前不能在简历中写“Testcontainers 已跑通”。
+当前自动化结果是：后端 91 项被发现，89 项非容器测试执行通过，2 项 Testcontainers 因 Docker 不可用而跳过；前端 Prettier、TypeScript 和生产构建通过。401／403、业务异常、残缺 JSON 和错误路径参数均使用稳定的错误 JSON 契约，并与响应头、完成日志共享 `requestId`。`scripts/verify.ps1 -RequireContainers` 会把容器测试跳过判为失败，因此当前不能在简历中写“Testcontainers 已跑通”。
 
 ## 七节学习主线
 
@@ -112,6 +113,7 @@ flowchart LR
 3. 支付数据库当前只允许一次尝试和一种成功事件；接入真实支付、退款或换渠道前需要扩展事件 Inbox、重试、对账和状态转移规则。
 4. 下载使用 `readAllBytes()` 读取 Classpath 小文件；生产对象存储还需要流式传输或短时签名 URL、Range、限流和失败审计。
 5. 无障碍仍缺 NVDA／VoiceOver、Safari／Firefox、真机、200%／400% 缩放和强制颜色模式审计。
+6. 当前请求编号只覆盖单个后端进程；仍缺集中日志、指标、告警和跨服务 trace context，不能描述为生产可观测性平台。
 
 `OrderMapper` 的重复订单快照 SQL 已迁入 XML 公共片段，并由 `OrderMapperXmlTest` 检查 9 个映射语句、行锁差异和生成主键配置。
 
