@@ -96,7 +96,7 @@ npm run dev
 
 后端测试覆盖认证、订单核价与幂等、支付事件、权益、订单查询、Release、Manifest 和一次性下载权限。真实 MySQL 与浏览器验收结果记录在 [学习执行日志](docs/08-学习执行日志.md)。
 
-新增的 `PurchaseFlowMySqlIntegrationTest` 会在 Docker 可用时启动临时 MySQL，执行 Flyway V1～V12，并验证真实下单支付、重放幂等和支付失败回滚。当前机器尚未得到 `Skipped: 0`，运行方法与证据边界见[第七课](docs/25-第七课-Testcontainers真实MySQL集成测试-V1.0.md)。
+`PurchaseFlowMySqlIntegrationTest` 会在 Docker 可用时启动临时 MySQL，执行 Flyway V1～V12，并验证真实下单支付、重放幂等、一次性下载、重复 token，以及 Grant／DownloadAudit 写入失败时的事务回滚和重试。当前机器尚未得到 `Skipped: 0`，运行方法与证据边界见[第七课](docs/25-第七课-Testcontainers真实MySQL集成测试-V1.0.md)。
 
 开发环境可在任一路由追加 `?a11y=1` 运行 axe，例如 `http://localhost:5173/products/1001?a11y=1`。详细复测方法、人工检查和未覆盖边界见 [无障碍审查报告](docs/18-无障碍审查与修复报告-2026-10-03.md)。
 

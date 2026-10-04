@@ -3,6 +3,10 @@ package dev.meteor.integration;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import dev.meteor.download.dto.DownloadAuthorizationResponse;
+import dev.meteor.download.dto.DownloadFilePayload;
+import dev.meteor.download.service.DownloadNotFoundException;
+import dev.meteor.download.service.DownloadService;
 import dev.meteor.order.dto.CreateOrderRequest;
 import dev.meteor.order.dto.OrderResponse;
 import dev.meteor.order.model.OrderStatus;
@@ -45,8 +49,11 @@ class PurchaseFlowMySqlIntegrationTest {
     @Autowired
     private PaymentService paymentService;
 
+    @Autowired
+    private DownloadService downloadService;
+
     @Test
-    void runsAllMigrationsAndCompletesAnIdempotentPurchase() {
+    void runsAllMigrationsAndCompletesIdempotentPurchaseAndDownload() {
         long buyerId = userId("buyer@meteor.local");
         long creatorId = userId("creator@meteor.local");
 
@@ -81,15 +88,35 @@ class PurchaseFlowMySqlIntegrationTest {
         assertThat(replayedPayment.entitlementGrantId()).isEqualTo(payment.entitlementGrantId());
         assertThat(count("payment_attempts", "order_id", order.id())).isEqualTo(1);
         assertThat(count("payment_events", "payment_attempt_id", paymentAttemptId(order.id()))).isEqualTo(1);
-        assertThat(count("entitlement_grants", "user_id", buyerId)).isEqualTo(1);
+        assertThat(payment.entitlementGrantId()).isNotNull();
+        assertThat(count("entitlement_grants", "id", payment.entitlementGrantId())).isEqualTo(1);
 
         assertThat(orderService.getOrder(buyerId, order.id()).status()).isEqualTo(OrderStatus.PAID);
         assertThatThrownBy(() -> orderService.getOrder(creatorId, order.id()))
                 .isInstanceOf(OrderNotFoundException.class);
+
+        long grantId = payment.entitlementGrantId();
+        DownloadAuthorizationResponse authorization = downloadService.authorize(
+                buyerId,
+                grantId,
+                3001L,
+                6001L
+        );
+        String token = tokenFrom(authorization);
+        DownloadFilePayload file = downloadService.consume(buyerId, token);
+
+        assertThat(file.filename()).isEqualTo("basic-resume-template.html");
+        assertThat(file.sizeBytes()).isEqualTo(634L);
+        assertThat(file.resource().isReadable()).isTrue();
+        assertThat(count("download_tickets", "id", authorization.ticketId())).isEqualTo(1);
+        assertThat(count("download_audits", "download_ticket_id", authorization.ticketId())).isEqualTo(1);
+        assertThat(ticketStatus(authorization.ticketId())).isEqualTo("CONSUMED");
+        assertThatThrownBy(() -> downloadService.consume(buyerId, token))
+                .isInstanceOf(DownloadNotFoundException.class);
     }
 
     @Test
-    void rollsBackPaymentWhenEntitlementInsertFails() {
+    void rollsBackBusinessTransactionsWhenDownstreamInsertFails() {
         long buyerId = userId("buyer@meteor.local");
         OrderResponse order = orderService.createOrder(
                 buyerId,
@@ -132,6 +159,57 @@ class PurchaseFlowMySqlIntegrationTest {
                 Integer.class,
                 order.id()
         )).isZero();
+
+        OrderResponse downloadOrder = orderService.createOrder(
+                buyerId,
+                new CreateOrderRequest(1001L, 2001L, "it-download-rollback")
+        );
+        PaymentResponse downloadPayment = paymentService.applyTestPayment(
+                buyerId,
+                downloadOrder.id(),
+                new TestPaymentEventRequest(
+                        "it-event-download-rollback",
+                        "it-transaction-download-rollback",
+                        1900L,
+                        "CNY"
+                )
+        );
+        assertThat(downloadPayment.entitlementGrantId()).isNotNull();
+        DownloadAuthorizationResponse authorization = downloadService.authorize(
+                buyerId,
+                downloadPayment.entitlementGrantId(),
+                3001L,
+                6001L
+        );
+        String token = tokenFrom(authorization);
+
+        jdbcTemplate.execute("""
+                CREATE TRIGGER reject_integration_test_download_audit
+                BEFORE INSERT ON download_audits
+                FOR EACH ROW
+                SIGNAL SQLSTATE '45000'
+                SET MESSAGE_TEXT = 'forced download audit failure for transaction test'
+                """);
+        try {
+            assertThatThrownBy(() -> downloadService.consume(buyerId, token))
+                    .isInstanceOf(DataAccessException.class);
+        } finally {
+            jdbcTemplate.execute("DROP TRIGGER IF EXISTS reject_integration_test_download_audit");
+        }
+
+        assertThat(ticketStatus(authorization.ticketId())).isEqualTo("ISSUED");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM download_tickets "
+                        + "WHERE id = ? AND consumed_at IS NULL",
+                Integer.class,
+                authorization.ticketId()
+        )).isEqualTo(1);
+        assertThat(count("download_audits", "download_ticket_id", authorization.ticketId())).isZero();
+
+        DownloadFilePayload retriedFile = downloadService.consume(buyerId, token);
+        assertThat(retriedFile.sizeBytes()).isEqualTo(634L);
+        assertThat(ticketStatus(authorization.ticketId())).isEqualTo("CONSUMED");
+        assertThat(count("download_audits", "download_ticket_id", authorization.ticketId())).isEqualTo(1);
     }
 
     private long userId(String email) {
@@ -160,6 +238,22 @@ class PurchaseFlowMySqlIntegrationTest {
         );
         assertThat(id).isNotNull();
         return id;
+    }
+
+    private String ticketStatus(long ticketId) {
+        String status = jdbcTemplate.queryForObject(
+                "SELECT status FROM download_tickets WHERE id = ?",
+                String.class,
+                ticketId
+        );
+        assertThat(status).isNotNull();
+        return status;
+    }
+
+    private static String tokenFrom(DownloadAuthorizationResponse authorization) {
+        String prefix = "/api/downloads/";
+        assertThat(authorization.downloadUrl()).startsWith(prefix);
+        return authorization.downloadUrl().substring(prefix.length());
     }
 
     private int count(String table, String column, Object value) {

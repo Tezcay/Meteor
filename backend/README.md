@@ -113,7 +113,7 @@ E:\VibeCoding\Meteor\scripts\mysql\bootstrap-local.sql
 
 现有 93 项非容器测试覆盖公开商品列表／详情的 HTTP 契约、数据库账号加载、订单核价与幂等、统一错误 JSON、请求编号校验／MDC 清理／下载 token 日志遮蔽、订单 HTTP 认证／CSRF／校验／错误契约、OrderMapper XML 映射契约、测试支付事件、状态转移、金额校验与 HTTP 开关／认证／CSRF 契约、权益发放、内容库／Release／Manifest 的当前用户与资源隐藏契约、下载票据签发与一次性消费、文件完整性、存储失败，以及登录、Session、附件文件名和媒体类型的 Web 行为。
 
-`PurchaseFlowMySqlIntegrationTest` 另外定义 2 项 Testcontainers 测试：临时 MySQL 从空库执行 Flyway V1～V12，再使用真实 MyBatis Mapper 验证下单／支付／权益幂等链，以及 Grant 插入失败时的事务回滚。Docker 可用时可单独执行：
+`PurchaseFlowMySqlIntegrationTest` 另外定义 2 项 Testcontainers 测试：临时 MySQL 从空库执行 Flyway V1～V12，再使用真实 MyBatis Mapper 验证下单／支付／权益／一次性下载链，以及 Grant 或 DownloadAudit 插入失败时的事务回滚。下载审计失败后还会使用同一 token 重试，证明票据更新已回滚。Docker 可用时可单独执行：
 
 ```powershell
 .\mvnw.cmd -Dtest=PurchaseFlowMySqlIntegrationTest test

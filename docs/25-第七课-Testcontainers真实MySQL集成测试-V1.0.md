@@ -12,9 +12,9 @@
 | 1. 为什么补集成测试 | 15 分钟 | 区分 Stub、Web 切片和真实数据库测试 | 第 2 节依赖与容器 |
 | 2. 容器怎样接入 Spring | 15 分钟 | 看懂三个依赖、三个注解和 `@ServiceConnection` | 第 3 节数据库启动 |
 | 3. Flyway 与隔离数据库 | 15 分钟 | 理解每次从空库迁移以及为什么不污染本地库 | 第 4 节成功链 |
-| 4. 下单支付成功链 | 20 分钟 | 把 Service、Mapper、事务和真实表串起来 | 第 5 节幂等证据 |
+| 4. 下单支付下载成功链 | 20 分钟 | 把 Service、Mapper、事务、文件和真实表串起来 | 第 5 节幂等证据 |
 | 5. 幂等与归属证据 | 15 分钟 | 看懂数据库计数和跨用户 404 的断言 | 第 6 节回滚链 |
-| 6. 强制失败与事务回滚 | 20 分钟 | 理解临时 Trigger 怎样证明原子性 | 第 7 节运行方法 |
+| 6. 强制失败与事务回滚 | 20 分钟 | 理解两个临时 Trigger 怎样证明支付与下载原子性 | 第 7 节运行方法 |
 | 7. 怎样运行和判读报告 | 15 分钟 | 分清通过、跳过和环境失败 | 第 8 节质量门禁 |
 | 8. 一键质量门禁 | 15 分钟 | 看懂 Wrapper、普通模式和严格模式 | 第 9 节测试边界 |
 | 9. 面试表达与后续 CI | 15 分钟 | 准确说明已经完成和仍待验证的部分 | 完成本课清单 |
@@ -198,12 +198,12 @@ H2 是运行在 JVM 内的数据库，启动更快，但 MySQL 的以下细节�
 
 本项目已经使用多项 MySQL 特性，因此这条测试直接选择 MySQL 容器。
 
-## 4. 第一项测试：真实下单和支付
+## 4. 第一项测试：真实下单、支付和一次性下载
 
 方法名：
 
 ```java
-void runsAllMigrationsAndCompletesAnIdempotentPurchase()
+void runsAllMigrationsAndCompletesIdempotentPurchaseAndDownload()
 ```
 
 ### 4.1 从迁移数据找到用户
@@ -283,6 +283,25 @@ PaymentResponse payment =
 
 随后用相同事件再次调用。事件 ID 和 Grant ID 必须保持不变，三张表的相关记录都只能有一条。
 
+### 4.5 从真实 Grant 走到文件响应
+
+支付成功返回真实 `entitlementGrantId` 后，测试继续调用：
+
+```java
+DownloadAuthorizationResponse authorization = downloadService.authorize(
+        buyerId,
+        grantId,
+        3001L,
+        6001L
+);
+String token = tokenFrom(authorization);
+DownloadFilePayload file = downloadService.consume(buyerId, token);
+```
+
+这段代码连接 Flyway V6～V12 创建的 Grant、Release、ManifestItem、FileObject、DownloadTicket 和 DownloadAudit。断言会检查 634 B Classpath 文件可读、票据状态为 `CONSUMED`、审计恰好一条，并再次消费同一 token 得到 `DownloadNotFoundException`。
+
+这仍是 Service／Mapper／真实 MySQL 集成测试，没有经过 Session、CSRF 或浏览器保存；HTTP 边界继续由 `DownloadControllerWebTest` 与真实浏览器验收负责。
+
 ## 5. 测试里怎样证明幂等和资源归属
 
 ### 5.1 不只断言返回对象
@@ -294,6 +313,8 @@ orders                1 行
 payment_attempts      1 行
 payment_events        1 行
 entitlement_grants    1 行
+download_tickets      1 行，状态 CONSUMED
+download_audits       1 行
 ```
 
 这些断言与数据库唯一约束一起检查结果。唯一约束负责最终防线，测试负责证明当前代码确实遵守设计。
@@ -321,7 +342,7 @@ assertThatThrownBy(() -> orderService.getOrder(creatorId, order.id()))
 方法名：
 
 ```java
-void rollsBackPaymentWhenEntitlementInsertFails()
+void rollsBackBusinessTransactionsWhenDownstreamInsertFails()
 ```
 
 ### 6.1 为什么需要主动制造失败
@@ -386,6 +407,28 @@ try {
 
 这四项一起证明本地支付不会留下“订单已支付但无权益”或“事件存在但状态没改”的半成品。
 
+### 6.6 审计写入失败时下载票据也必须回滚
+
+同一个测试随后完成另一笔 Basic 购买并签发下载票据，再在临时库创建第二个 Trigger：
+
+```sql
+CREATE TRIGGER reject_integration_test_download_audit
+BEFORE INSERT ON download_audits
+FOR EACH ROW
+SIGNAL SQLSTATE '45000'
+SET MESSAGE_TEXT = 'forced download audit failure for transaction test';
+```
+
+`DownloadService.consume` 的事务顺序是：锁定票据、重新授权、校验文件、更新票据为 `CONSUMED`、插入审计。Trigger 在最后一步制造真实数据库错误；正确结果必须是前面的票据更新一起回滚：
+
+| 数据 | 失败后的期望 |
+| --- | --- |
+| `download_tickets.status` | 仍为 `ISSUED` |
+| `download_tickets.consumed_at` | 仍为 `NULL` |
+| `download_audits` | 0 行 |
+
+测试删除 Trigger 后使用同一 token 重试。重试应成功返回 634 B 文件，并把票据改为 `CONSUMED`、写入一条审计。这一步证明的不只是数据库快照，还证明回滚后用户仍保留一次有效下载机会。
+
 ## 7. 运行、报告和当前环境问题
 
 ### 7.1 先确认 Docker 引擎可用
@@ -434,10 +477,10 @@ Tests run: 2, Failures: 0, Errors: 0, Skipped: 2
 本轮已经确认：
 
 - Maven 成功解析 Spring Boot 4.1.0 管理的 Testcontainers 2.0.5；
-- 新测试使用 Java 21 目标成功编译；
+- 两项测试使用 Java 21 目标成功编译；第一项覆盖购买成功、支付重放、逐层授权、一次性下载和重复 token，第二项覆盖 Grant 插入失败与 DownloadAudit 插入失败两种事务回滚；
 - 全仓 Maven 发现 95 项测试；
 - 93 项非容器测试全部通过，其中包括统一错误 JSON、请求编号、公开商品、订单、支付与交付资源 HTTP 契约、OrderMapper XML 映射契约和支付状态分支；
-- 新增 2 项因 Docker 环境不可用而跳过；
+- 2 项容器测试因 Docker 环境不可用而跳过；
 - Docker Desktop 4.86.0 日志显示启动时无法访问遗留的 `dockerInference` socket，随后后端退出；
 - 尝试临时关闭 Docker AI 后仍触发同一错误，设置已经恢复；
 - 没有重置 Docker、删除镜像或改动本地业务数据库。
@@ -525,6 +568,8 @@ Docker 环境修复后先完成本机 2 项测试，再添加 CI：
 - [ ] 能解释相同幂等键和相同支付事件怎样验证只写一次。
 - [ ] 能说明临时 Trigger 为什么在 Grant 插入处制造失败。
 - [ ] 能用四项数据库结果证明事务回滚。
+- [ ] 能说明一次性下载成功时 Ticket 和 Audit 各自写入什么。
+- [ ] 能说明 Audit 插入失败时 Ticket 为什么必须回到 ISSUED，并能用同一 token 重试。
 - [ ] 能区分 `Failures: 0` 与 `Skipped: 2`。
 - [ ] 能解释普通门禁为何警告跳过、严格门禁为何直接失败。
 - [ ] 能说出 Maven Wrapper 固定了什么、仍未提供什么。
