@@ -1,8 +1,10 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AdminPages from './pages/AdminPages.vue'
+import AccountPages from './pages/AccountPages.vue'
 import BuyerPages from './pages/BuyerPages.vue'
 import CreatorPages from './pages/CreatorPages.vue'
 import HomePage from './pages/HomePage.vue'
+import { getCurrentUser, roleFromCurrentUser } from './api/auth'
 import { getLocalRole } from './data/localStore'
 
 const router = createRouter({
@@ -15,17 +17,41 @@ const router = createRouter({
   },
   routes: [
     { path: '/', component: HomePage },
-    { path: '/admin/:pathMatch(.*)*', component: AdminPages, props: (route) => ({ path: route.path }) },
-    { path: '/creator/:pathMatch(.*)*', component: CreatorPages, props: (route) => ({ path: route.path }) },
+    { path: '/library', component: AccountPages, props: (route) => ({ path: route.path }) },
+    { path: '/orders', component: AccountPages, props: (route) => ({ path: route.path }) },
+    {
+      path: '/orders/:orderId(\\d+)',
+      component: AccountPages,
+      props: (route) => ({ path: route.path }),
+    },
+    {
+      path: '/admin/:pathMatch(.*)*',
+      component: AdminPages,
+      props: (route) => ({ path: route.path }),
+    },
+    {
+      path: '/creator/:pathMatch(.*)*',
+      component: CreatorPages,
+      props: (route) => ({ path: route.path }),
+    },
     { path: '/:pathMatch(.*)*', component: BuyerPages, props: (route) => ({ path: route.path }) },
   ],
 })
 
-router.beforeEach((to) => {
-  const role = getLocalRole()
+router.beforeEach(async (to) => {
   const requiresCreator = to.path.startsWith('/creator')
   const requiresAdmin = to.path.startsWith('/admin')
   const requiresAccount = to.path === '/library' || to.path.startsWith('/orders')
+  if (!requiresCreator && !requiresAdmin && !requiresAccount) return true
+
+  let role = getLocalRole()
+  try {
+    const user = await getCurrentUser()
+    role = user ? roleFromCurrentUser(user) : 'visitor'
+  } catch {
+    // Local demo pages may stay browsable during Vite development; production fails closed.
+    if (!import.meta.env.DEV) role = 'visitor'
+  }
   const allowed =
     (!requiresCreator && !requiresAdmin && (!requiresAccount || role !== 'visitor')) ||
     (requiresCreator && role === 'creator') ||
@@ -41,7 +67,7 @@ const pageTitles: Record<string, string> = {
   '/checkout': '确认购买 · Meteor',
   '/checkout/result': '购买状态 · Meteor',
   '/library': '内容库 · Meteor',
-  '/orders/demo': '订单详情预览 · Meteor',
+  '/orders': '订单记录 · Meteor',
   '/login': '登录 · Meteor',
   '/creator/start': '成为创作者 · Meteor',
   '/creator/works': '我的作品 · Meteor',
@@ -57,9 +83,11 @@ const pageTitles: Record<string, string> = {
 router.afterEach((to) => {
   document.title =
     pageTitles[to.path] ??
-    (/^\/(products\/[1-9]\d*|collections\/[^/]+)$/.test(to.path)
-      ? '作品详情 · Meteor'
-      : '页面未找到 · Meteor')
+    (/^\/orders\/[1-9]\d*$/.test(to.path)
+      ? '订单详情 · Meteor'
+      : /^\/(products\/[1-9]\d*|collections\/[^/]+)$/.test(to.path)
+        ? '作品详情 · Meteor'
+        : '页面未找到 · Meteor')
 })
 
 export default router

@@ -112,7 +112,14 @@ const demoItems: ShowcaseItem[] = demoCollections.flatMap(({ category, items }) 
     variant,
     featured: variant < 2,
     subcategory:
-      ({ design: 'layout', templates: 'work', fonts: 'display', 'three-d': 'object', audio: 'ambient', publications: 'visual' })[category] ?? 'other',
+      {
+        design: 'layout',
+        templates: 'work',
+        fonts: 'display',
+        'three-d': 'object',
+        audio: 'ambient',
+        publications: 'visual',
+      }[category] ?? 'other',
     tags: [category, variant % 2 ? '收藏' : '精选'],
   })),
 )

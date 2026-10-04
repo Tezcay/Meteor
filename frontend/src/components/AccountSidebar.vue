@@ -10,8 +10,8 @@ defineProps<{ active: 'library' | 'orders' }>()
     </div>
     <nav aria-label="账户导航">
       <a href="/library" :aria-current="active === 'library' ? 'page' : undefined">内容库</a>
-      <a href="/orders/demo" :aria-current="active === 'orders' ? 'page' : undefined">订单记录</a>
+      <a href="/orders" :aria-current="active === 'orders' ? 'page' : undefined">订单记录</a>
     </nav>
-    <p>当前展示本地演示数据，接入后端后将替换为真实账户与授权状态。</p>
+    <p>订单与访问权益均从当前后端 Session 查询，不使用浏览器中的演示数据。</p>
   </aside>
 </template>

@@ -5,12 +5,16 @@ defineEmits<{ browse: [category: DiscoveryCategory] }>()
 </script>
 
 <template>
-  <section id="category-preview" class="discovery-section content-width" aria-labelledby="discover-title">
-      <div class="section-heading">
-        <h2 id="discover-title" tabindex="-1">精选分类</h2>
-      </div>
+  <section
+    id="category-preview"
+    class="discovery-section content-width"
+    aria-labelledby="discover-title"
+  >
+    <div class="section-heading">
+      <h2 id="discover-title" tabindex="-1">精选分类</h2>
+    </div>
 
-      <div class="inspiration-grid">
+    <div class="inspiration-grid">
       <article
         id="topic-design"
         class="inspiration-topic topic-design"
@@ -132,6 +136,6 @@ defineEmits<{ browse: [category: DiscoveryCategory] }>()
           </button>
         </div>
       </article>
-      </div>
+    </div>
   </section>
 </template>

@@ -41,7 +41,9 @@ const matches = computed(() => {
       href: `/products/${product.value.id}`,
       packages: product.value.packages.map((option) => option.name),
     }
-    return ['all', 'templates'].includes(category.value) && includesTerm(published) ? [published] : []
+    return ['all', 'templates'].includes(category.value) && includesTerm(published)
+      ? [published]
+      : []
   }
 
   return showcaseItems
@@ -146,7 +148,10 @@ defineExpose({ open })
             <summary>
               <span
                 ><strong>{{ item.title }}</strong
-                ><small>{{ item.maker }} / {{ categories.find((entry) => entry.value === item.category)?.label }}</small></span
+                ><small
+                  >{{ item.maker }} /
+                  {{ categories.find((entry) => entry.value === item.category)?.label }}</small
+                ></span
               >
               <span class="result-action">查看简介 <span aria-hidden="true">＋</span></span>
             </summary>

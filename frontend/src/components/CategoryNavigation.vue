@@ -33,7 +33,9 @@ function toneFor(category: DiscoveryCategory) {
         type="button"
         :aria-pressed="activeCategory === 'all'"
         @click="$emit('select', 'all')"
-      ><i class="interest-mark mark-all" aria-hidden="true"></i>全部</button>
+      >
+        <i class="interest-mark mark-all" aria-hidden="true"></i>全部
+      </button>
       <button
         v-for="category in categories"
         :key="category.value"
@@ -45,7 +47,8 @@ function toneFor(category: DiscoveryCategory) {
         :aria-label="'在首页查看' + category.label"
         @click="$emit('select', category.value)"
       >
-        <i class="interest-mark" :class="`mark-${category.value}`" aria-hidden="true"></i>{{ category.label }}
+        <i class="interest-mark" :class="`mark-${category.value}`" aria-hidden="true"></i
+        >{{ category.label }}
       </button>
     </div>
   </nav>

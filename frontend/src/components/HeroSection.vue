@@ -35,8 +35,7 @@ function posterPosition(index: number) {
   const count = featuredItems.value.length
   if (index === (currentPoster.value - 1 + count) % count) return 'is-previous'
   if (index === (currentPoster.value + 1) % count) return 'is-next'
-  if (index === (currentPoster.value - 2 + count) % count)
-    return 'is-far-previous'
+  if (index === (currentPoster.value - 2 + count) % count) return 'is-far-previous'
   if (index === (currentPoster.value + 2) % count) return 'is-far-next'
   return 'is-hidden'
 }
@@ -60,10 +59,15 @@ function usePoster(index: number) {
       <h1 id="featured-title">{{ featureTitle }}</h1>
       <div class="poster-controls" aria-label="精选海报切换">
         <span aria-live="polite">
-          {{ String(currentPoster + 1).padStart(2, '0') }} / {{ String(featuredItems.length).padStart(2, '0') }}
+          {{ String(currentPoster + 1).padStart(2, '0') }} /
+          {{ String(featuredItems.length).padStart(2, '0') }}
         </span>
-        <button type="button" aria-label="上一张" @click="selectPoster(currentPoster - 1)">←</button>
-        <button type="button" aria-label="下一张" @click="selectPoster(currentPoster + 1)">→</button>
+        <button type="button" aria-label="上一张" @click="selectPoster(currentPoster - 1)">
+          ←
+        </button>
+        <button type="button" aria-label="下一张" @click="selectPoster(currentPoster + 1)">
+          →
+        </button>
       </div>
     </header>
 
@@ -95,7 +99,10 @@ function usePoster(index: number) {
           decoding="async"
           draggable="false"
         />
-        <span v-else class="poster-demo" aria-hidden="true"><small>{{ item.mark }}</small><strong>{{ item.title }}</strong></span>
+        <span v-else class="poster-demo" aria-hidden="true"
+          ><small>{{ item.mark }}</small
+          ><strong>{{ item.title }}</strong></span
+        >
       </button>
     </div>
   </section>

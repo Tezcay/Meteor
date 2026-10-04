@@ -17,15 +17,16 @@ const motion = ref({
   '--spot-y': '45%',
 })
 
-const palettes: Partial<Record<DiscoveryCategory, { accent: string; soft: string; glow: string }>> = {
-  design: { accent: '#71445d', soft: '#d8df9d', glow: '#f1d7e5' },
-  photography: { accent: '#4f6570', soft: '#cbd7d6', glow: '#dce9ee' },
-  illustration: { accent: '#76577f', soft: '#d8cbe0', glow: '#f0d9c5' },
-  fonts: { accent: '#2d2d2b', soft: '#d9d6cd', glow: '#e9dcc1' },
-  'three-d': { accent: '#526553', soft: '#ced9bd', glow: '#e5d0b0' },
-  audio: { accent: '#704c63', soft: '#d8c2cf', glow: '#ead9b5' },
-  publications: { accent: '#4d5d72', soft: '#cbd4df', glow: '#ead8c8' },
-}
+const palettes: Partial<Record<DiscoveryCategory, { accent: string; soft: string; glow: string }>> =
+  {
+    design: { accent: '#71445d', soft: '#d8df9d', glow: '#f1d7e5' },
+    photography: { accent: '#4f6570', soft: '#cbd7d6', glow: '#dce9ee' },
+    illustration: { accent: '#76577f', soft: '#d8cbe0', glow: '#f0d9c5' },
+    fonts: { accent: '#2d2d2b', soft: '#d9d6cd', glow: '#e9dcc1' },
+    'three-d': { accent: '#526553', soft: '#ced9bd', glow: '#e5d0b0' },
+    audio: { accent: '#704c63', soft: '#d8c2cf', glow: '#ead9b5' },
+    publications: { accent: '#4d5d72', soft: '#cbd4df', glow: '#ead8c8' },
+  }
 
 const sceneStyle = computed(() => {
   const palette = palettes[props.category] ?? palettes.design!
@@ -77,9 +78,7 @@ function resetMotion() {
       <div class="empty-gallery-shadow"></div>
       <div class="empty-gallery-orbit"></div>
       <div class="empty-gallery-paper paper-back"></div>
-      <div class="empty-gallery-paper paper-middle">
-        <span></span><span></span><span></span>
-      </div>
+      <div class="empty-gallery-paper paper-middle"><span></span><span></span><span></span></div>
       <div class="empty-gallery-paper paper-front">
         <span class="paper-rule"></span>
         <span class="paper-arch"></span>
@@ -92,9 +91,7 @@ function resetMotion() {
 
     <div class="empty-gallery-copy">
       <h2 id="empty-category-title">暂无作品</h2>
-      <button class="empty-gallery-action" type="button" @click="$emit('reset')">
-        查看全部
-      </button>
+      <button class="empty-gallery-action" type="button" @click="$emit('reset')">查看全部</button>
     </div>
   </section>
 </template>
@@ -176,7 +173,8 @@ function resetMotion() {
   height: 270px;
   border: 1px solid color-mix(in srgb, var(--scene-accent) 26%, transparent);
   border-radius: 50%;
-  transform: translate(-50%, -50%) translate(calc(var(--shift-x) * -0.22), calc(var(--shift-y) * -0.22));
+  transform: translate(-50%, -50%)
+    translate(calc(var(--shift-x) * -0.22), calc(var(--shift-y) * -0.22));
   transition: transform 240ms ease;
 }
 .empty-gallery-paper {

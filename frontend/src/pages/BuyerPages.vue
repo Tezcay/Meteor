@@ -1,12 +1,16 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import AccountSidebar from '../components/AccountSidebar.vue'
 import InnerHeader from '../components/InnerHeader.vue'
+import { getCurrentUser, login as loginWithApi, roleFromCurrentUser } from '../api/auth'
+import { createOrder, getOrder } from '../api/orders'
+import type { OrderDetailResponse } from '../api/orders'
+import { applyTestPayment } from '../api/payments'
 import { getProductDetail, getPublishedProducts } from '../api/products'
 import { categoryOptions, parseCategory, subcategoryLabel } from '../data/categories'
-import { getLocalPurchases, getLocalRole, saveLocalPurchase, saveLocalRole } from '../data/localStore'
+import { saveLocalRole } from '../data/localStore'
 import type { LocalRole } from '../data/localStore'
+import { ApiError } from '../types/auth'
 import {
   artworkCollections,
   illustrationTopics,
@@ -27,8 +31,9 @@ const query = ref(String(route.query.q ?? ''))
 const topic = ref(String(route.query.topic ?? ''))
 const selectedPackage = ref(Number(route.query.package ?? 2001))
 const resultState = ref<'waiting' | 'checking' | 'ready' | 'late'>('waiting')
-const showLibraryPreview = ref(false)
-const showOrderPreview = ref(false)
+const resultOrder = ref<OrderDetailResponse | null>(null)
+const resultLoading = ref(false)
+const resultError = ref('')
 const product = ref<ProductDetailResponse | null>(null)
 const productError = ref(false)
 const productLoading = ref(false)
@@ -38,7 +43,16 @@ const catalogError = ref(false)
 const catalogSort = ref<'featured' | 'newest' | 'rating'>('featured')
 const catalogPage = ref(1)
 const catalogPageSize = 12
-const signInNotice = ref(false)
+const signInNotice = ref('')
+const orderLoading = ref(false)
+const orderError = ref('')
+const paymentLoading = ref(false)
+const paymentError = ref('')
+const paymentNotice = ref('')
+const testPaymentEventId = ref('')
+const testPaymentTransactionId = ref('')
+const checkoutAuthenticated = ref<boolean | null>(null)
+const demoAccountsVisible = import.meta.env.DEV
 function roleForNextPath(next: string): Exclude<LocalRole, 'visitor'> {
   if (next.startsWith('/admin')) return 'admin'
   if (next.startsWith('/creator')) return 'creator'
@@ -47,35 +61,50 @@ function roleForNextPath(next: string): Exclude<LocalRole, 'visitor'> {
 const loginRole = ref<Exclude<LocalRole, 'visitor'>>(
   roleForNextPath(String(route.query.next ?? '')),
 )
+const loginEmail = ref(
+  demoAccountsVisible
+    ? loginRole.value === 'creator'
+      ? 'creator@meteor.local'
+      : 'buyer@meteor.local'
+    : '',
+)
+const loginPassword = ref(demoAccountsVisible ? 'password' : '')
+const loginLoading = ref(false)
+const loginError = ref('')
 const activeImageIndex = ref(0)
 const localRating = ref(0)
 const ratingNotice = ref('')
 const collectionSaved = ref(false)
 const collectionViewer = ref<HTMLDialogElement | null>(null)
-const localPurchases = ref(getLocalPurchases())
-const previewPurchase = {
-  id: 'preview-order',
-  productId: 1001,
-  title: '求职材料模板包',
-  shopName: 'Northstar Design',
-  packageName: 'Basic',
-  purchasedAt: '2026-09-20T09:00:00.000Z',
+
+function selectLoginRole(role: Exclude<LocalRole, 'visitor'>) {
+  loginRole.value = role
+  if (!demoAccountsVisible) return
+  if (role === 'user') loginEmail.value = 'buyer@meteor.local'
+  if (role === 'creator') loginEmail.value = 'creator@meteor.local'
+  if (!loginPassword.value) loginPassword.value = 'password'
 }
-const libraryEntries = computed(() => localPurchases.value.length ? localPurchases.value : showLibraryPreview.value ? [previewPurchase] : [])
-const orderEntries = computed(() => localPurchases.value.length ? localPurchases.value : showOrderPreview.value ? [previewPurchase] : [])
-const activeOrderId = computed(() => {
-  const requested = String(route.query.order ?? '')
-  return orderEntries.value.some((purchase) => purchase.id === requested)
-    ? requested
-    : (orderEntries.value[0]?.id ?? '')
-})
+
+function checkoutIdempotency(productId: number, packageId: number) {
+  const storageKey = `meteor.checkout.idempotency.${productId}.${packageId}`
+  const prefix = `checkout-${productId}-${packageId}-`
+  const existing = sessionStorage.getItem(storageKey)
+  if (existing?.startsWith(prefix) && existing.length <= 100) {
+    return { key: existing, storageKey }
+  }
+  const key = `${prefix}${crypto.randomUUID()}`
+  sessionStorage.setItem(storageKey, key)
+  return { key, storageKey }
+}
 let request: AbortController | null = null
 let catalogRequest: AbortController | null = null
 let searchTimer: ReturnType<typeof setTimeout> | null = null
 const isProductPath = computed(() => /^\/products\/[1-9]\d*$/.test(props.path))
 const isCollectionPath = computed(() => props.path.startsWith('/collections/'))
 const collection = computed(() =>
-  isCollectionPath.value ? getArtworkCollection(props.path.slice('/collections/'.length)) : undefined,
+  isCollectionPath.value
+    ? getArtworkCollection(props.path.slice('/collections/'.length))
+    : undefined,
 )
 const activeCollectionImage = computed(() => collection.value?.images[activeImageIndex.value])
 const collectionCategoryLabel = computed(() =>
@@ -97,23 +126,69 @@ const requestedProductId = computed(() =>
 const displayProduct = computed(() => product.value ?? seededProduct)
 const canShowProduct = computed(() => product.value !== null || requestedProductId.value === 1001)
 const productSummary = computed(() => displayProduct.value.summary.replace(/[。！？]+$/, ''))
-type ProductPreview = { label: string; eyebrow: string; title: string; subtitle: string; footer: string }
+type ProductPreview = {
+  label: string
+  eyebrow: string
+  title: string
+  subtitle: string
+  footer: string
+}
 const productPreviewOptions = computed<ProductPreview[]>(() => {
   if (displayProduct.value.id !== 1001) {
     return [
-      { label: '封面', eyebrow: displayProduct.value.shopName + ' / DIGITAL WORKS', title: displayProduct.value.title, subtitle: '精选预览', footer: 'PREVIEW · 01' },
-      { label: '内容', eyebrow: 'CONTENTS / 02', title: '内容结构', subtitle: '清晰可见', footer: 'DETAILS · 02' },
-      { label: '授权', eyebrow: 'LICENSE / 03', title: '交付说明', subtitle: '购买后查看', footer: 'DELIVERY · 03' },
+      {
+        label: '封面',
+        eyebrow: displayProduct.value.shopName + ' / DIGITAL WORKS',
+        title: displayProduct.value.title,
+        subtitle: '精选预览',
+        footer: 'PREVIEW · 01',
+      },
+      {
+        label: '内容',
+        eyebrow: 'CONTENTS / 02',
+        title: '内容结构',
+        subtitle: '清晰可见',
+        footer: 'DETAILS · 02',
+      },
+      {
+        label: '授权',
+        eyebrow: 'LICENSE / 03',
+        title: '交付说明',
+        subtitle: '购买后查看',
+        footer: 'DELIVERY · 03',
+      },
     ]
   }
   return [
-    { label: '封面', eyebrow: 'NORTHSTAR DESIGN / DIGITAL WORKS', title: '把经历', subtitle: '排成故事', footer: 'RESUME · LETTER · PORTFOLIO' },
-    { label: '版式示意', eyebrow: 'GRID / TYPE / 02', title: '清晰层级', subtitle: '让信息先被看见', footer: 'LAYOUT STUDY · 02' },
-    { label: '内容说明', eyebrow: 'DELIVERY / 03', title: '一套完整', subtitle: '从简历到作品集', footer: 'EDITABLE FILES · 03' },
+    {
+      label: '封面',
+      eyebrow: 'NORTHSTAR DESIGN / DIGITAL WORKS',
+      title: '把经历',
+      subtitle: '排成故事',
+      footer: 'RESUME · LETTER · PORTFOLIO',
+    },
+    {
+      label: '版式示意',
+      eyebrow: 'GRID / TYPE / 02',
+      title: '清晰层级',
+      subtitle: '让信息先被看见',
+      footer: 'LAYOUT STUDY · 02',
+    },
+    {
+      label: '内容说明',
+      eyebrow: 'DELIVERY / 03',
+      title: '一套完整',
+      subtitle: '从简历到作品集',
+      footer: 'EDITABLE FILES · 03',
+    },
   ]
 })
-const activeProductPreview = computed(() => productPreviewOptions.value[activeImageIndex.value] ?? productPreviewOptions.value[0]!)
-const productRating = computed(() => displayProduct.value.id === 1001 ? { score: '4.8', count: 24 } : { score: '4.6', count: 8 })
+const activeProductPreview = computed(
+  () => productPreviewOptions.value[activeImageIndex.value] ?? productPreviewOptions.value[0]!,
+)
+const productRating = computed(() =>
+  displayProduct.value.id === 1001 ? { score: '4.8', count: 24 } : { score: '4.6', count: 8 },
+)
 const packageOption = computed(
   () =>
     displayProduct.value.packages.find((item) => item.id === selectedPackage.value) ??
@@ -144,13 +219,23 @@ const selectedPackagePresentation = computed(() => {
     note: '具体内容以作品发布信息为准',
   }
 })
-const checkoutRequiresSignIn = computed(() => getLocalRole() === 'visitor')
+const checkoutRequiresSignIn = computed(() => checkoutAuthenticated.value === false)
+const resultOrderId = computed(() => Number(route.query.orderId))
+const isServerOrderResult = computed(
+  () => Number.isSafeInteger(resultOrderId.value) && resultOrderId.value > 0,
+)
+const resultHasActiveEntitlement = computed(
+  () => resultOrder.value?.status === 'PAID' && resultOrder.value.entitlementStatus === 'ACTIVE',
+)
+const resultHasUnavailableEntitlement = computed(
+  () => resultOrder.value?.status === 'PAID' && resultOrder.value.entitlementStatus !== 'ACTIVE',
+)
 const isDemoProduct = computed(() => !product.value)
-const featuredIllustrationTopics = computed(() => category.value === 'illustration' ? illustrationTopics : [])
+const featuredIllustrationTopics = computed(() =>
+  category.value === 'illustration' ? illustrationTopics : [],
+)
 const featuredCollections = computed(() =>
-  artworkCollections.filter(
-    (item) => category.value === 'all' || item.category === category.value,
-  ),
+  artworkCollections.filter((item) => category.value === 'all' || item.category === category.value),
 )
 const catalogWorks = computed(() => {
   const keyword = query.value.trim().toLocaleLowerCase()
@@ -170,8 +255,12 @@ const catalogWorks = computed(() => {
     return Number(right.featured) - Number(left.featured) || left.variant - right.variant
   })
 })
-const visibleCatalogWorks = computed(() => catalogWorks.value.slice(0, catalogPage.value * catalogPageSize))
-const hasMoreCatalogWorks = computed(() => visibleCatalogWorks.value.length < catalogWorks.value.length)
+const visibleCatalogWorks = computed(() =>
+  catalogWorks.value.slice(0, catalogPage.value * catalogPageSize),
+)
+const hasMoreCatalogWorks = computed(
+  () => visibleCatalogWorks.value.length < catalogWorks.value.length,
+)
 const loadedCatalogProducts = computed(() =>
   category.value === 'all' || category.value === 'templates' ? catalog.value : [],
 )
@@ -179,14 +268,12 @@ watch(
   () => route.query.next,
   (next) => {
     if (props.path === '/login' && !signInNotice.value) {
-      loginRole.value = roleForNextPath(String(next ?? ''))
+      selectLoginRole(roleForNextPath(String(next ?? '')))
     }
   },
 )
 
-const section = computed(() =>
-  props.path === '/library' || props.path.startsWith('/orders') ? 'account' : 'discover',
-)
+const section = computed(() => 'discover')
 
 async function loadProduct(id = requestedProductId.value) {
   request?.abort()
@@ -238,23 +325,19 @@ watch([query, category, topic], () => {
 })
 
 onMounted(async () => {
-  window.addEventListener('meteor:purchases-change', refreshLocalPurchases)
   if (props.path === '/discover') void loadCatalog()
   if (props.path === '/shops/northstar' || isProductPath.value || props.path === '/checkout') {
     loadLocalRating()
     void loadProduct()
   }
+  if (props.path === '/checkout/result') void loadResultOrder()
+  if (props.path === '/checkout') void loadCheckoutIdentity()
 })
 onBeforeUnmount(() => {
-  window.removeEventListener('meteor:purchases-change', refreshLocalPurchases)
   request?.abort()
   catalogRequest?.abort()
   if (searchTimer) clearTimeout(searchTimer)
 })
-
-function refreshLocalPurchases() {
-  localPurchases.value = getLocalPurchases()
-}
 
 function setCategory(value: DiscoveryCategory) {
   category.value = value
@@ -274,8 +357,6 @@ watch(
     selectedPackage.value = Number(route.query.package ?? 2001)
     activeImageIndex.value = 0
     collectionSaved.value = false
-    localPurchases.value = getLocalPurchases()
-    if (props.path === '/checkout/result' && route.query.demo === 'ready') resultState.value = 'ready'
     product.value = null
     productError.value = false
     if (props.path === '/discover') void loadCatalog()
@@ -283,8 +364,37 @@ watch(
       loadLocalRating()
       void loadProduct()
     }
+    if (props.path === '/checkout/result') void loadResultOrder()
+    if (props.path === '/checkout') void loadCheckoutIdentity()
   },
 )
+
+async function loadCheckoutIdentity() {
+  try {
+    checkoutAuthenticated.value = Boolean(await getCurrentUser())
+  } catch {
+    checkoutAuthenticated.value = false
+  }
+}
+
+async function loadResultOrder() {
+  if (!isServerOrderResult.value) {
+    resultOrder.value = null
+    resultError.value = '订单地址不完整，请从订单记录或结账页进入。'
+    return
+  }
+  resultLoading.value = true
+  resultError.value = ''
+  try {
+    resultOrder.value = await getOrder(resultOrderId.value)
+    resultState.value = resultOrder.value.status === 'PAID' ? 'ready' : 'waiting'
+  } catch (error) {
+    resultOrder.value = null
+    resultError.value = error instanceof Error ? error.message : '订单状态读取失败，请稍后重试。'
+  } finally {
+    resultLoading.value = false
+  }
+}
 
 function packageOptionDescription(name: string) {
   if (displayProduct.value.id !== 1001) return '查看交付内容与授权范围'
@@ -298,7 +408,9 @@ function selectProductPreview(index: number) {
 }
 function loadLocalRating() {
   try {
-    localRating.value = Number(localStorage.getItem('meteor.product.rating.' + displayProduct.value.id) ?? 0)
+    localRating.value = Number(
+      localStorage.getItem('meteor.product.rating.' + displayProduct.value.id) ?? 0,
+    )
   } catch {
     localRating.value = 0
   }
@@ -324,6 +436,11 @@ function openCollectionViewer() {
   collectionViewer.value?.showModal()
 }
 
+function openCollectionImage(index: number) {
+  selectCollectionImage(index)
+  openCollectionViewer()
+}
+
 function closeCollectionViewer() {
   collectionViewer.value?.close()
 }
@@ -346,40 +463,97 @@ function loadMoreCatalogWorks() {
   catalogPage.value += 1
 }
 
-function completeDemoPurchase() {
+async function completeDemoPurchase() {
   if (!packageOption.value) return
+  if (checkoutAuthenticated.value === null) await loadCheckoutIdentity()
   if (checkoutRequiresSignIn.value) {
     void router.push({ path: '/login', query: { next: route.fullPath } })
     return
   }
-  saveLocalPurchase({
-    productId: displayProduct.value.id,
-    title: displayProduct.value.title,
-    shopName: displayProduct.value.shopName,
-    packageName: packageOption.value.name,
-  })
-  localPurchases.value = getLocalPurchases()
-  resultState.value = 'ready'
-  void router.push({ path: '/checkout/result', query: { demo: 'ready' } })
+  orderLoading.value = true
+  orderError.value = ''
+  try {
+    if (!product.value) {
+      throw new Error('当前无法连接交易后端，订单没有创建。请恢复服务后重试。')
+    }
+    const idempotency = checkoutIdempotency(product.value.id, packageOption.value.id)
+    const order = await createOrder(product.value.id, packageOption.value.id, idempotency.key)
+    sessionStorage.removeItem(idempotency.storageKey)
+    resultState.value = 'waiting'
+    void router.push({
+      path: '/checkout/result',
+      query: { orderId: String(order.id) },
+    })
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401) {
+      checkoutAuthenticated.value = false
+      void router.push({ path: '/login', query: { next: route.fullPath } })
+      return
+    }
+    orderError.value = error instanceof Error ? error.message : '订单创建失败，请稍后重试。'
+  } finally {
+    orderLoading.value = false
+  }
 }
 
-function formatPurchaseDate(value: string) {
-  return new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' }).format(new Date(value))
+async function completeLocalTestPayment() {
+  const order = resultOrder.value
+  if (!order) {
+    paymentError.value = '订单状态尚未读取完成，请重新读取后再试。'
+    return
+  }
+  paymentLoading.value = true
+  paymentError.value = ''
+  paymentNotice.value = ''
+  testPaymentEventId.value ||= `evt-ui-${order.id}-${crypto.randomUUID()}`
+  testPaymentTransactionId.value ||= `txn-ui-${order.id}-${crypto.randomUUID()}`
+  try {
+    const payment = await applyTestPayment(
+      order.id,
+      testPaymentEventId.value,
+      testPaymentTransactionId.value,
+      order.totalAmountCents,
+      order.currency,
+    )
+    resultState.value = 'ready'
+    paymentNotice.value = `订单已完成，访问权益 #${payment.entitlementGrantId ?? ''} 已生效。`
+    await loadResultOrder()
+  } catch (error) {
+    paymentError.value = error instanceof Error ? error.message : '测试支付失败，请稍后重试。'
+  } finally {
+    paymentLoading.value = false
+  }
 }
 
-function signInWithDemoRole() {
+async function signInWithDemoRole() {
   const requested = String(route.query.next ?? '')
   const next = requested.startsWith('/') && !requested.startsWith('//') ? requested : ''
-  const targetRole = roleForNextPath(next)
-  saveLocalRole(loginRole.value)
-  signInNotice.value = true
-  const canContinue = Boolean(next) && targetRole === loginRole.value
-  const destination = canContinue
-    ? next
-    : { user: '/library', creator: '/creator/works', admin: '/admin/reviews' }[loginRole.value]
-  void router.replace(destination)
+  loginLoading.value = true
+  loginError.value = ''
+  signInNotice.value = ''
+  if (loginRole.value === 'admin') {
+    loginError.value = '管理员账号将在管理员后端接口完成后开放。当前可先使用用户或创作者账号。'
+    loginLoading.value = false
+    return
+  }
+  try {
+    const user = await loginWithApi(loginEmail.value, loginPassword.value)
+    const actualRole = roleFromCurrentUser(user)
+    saveLocalRole(actualRole)
+    const targetRole = roleForNextPath(next)
+    signInNotice.value = `已连接后端会话：${user.displayName}`
+    const canContinue = Boolean(next) && targetRole === actualRole
+    const destination = canContinue
+      ? next
+      : { user: '/library', creator: '/creator/works', admin: '/admin/reviews' }[actualRole]
+    void router.replace(destination)
+  } catch (error) {
+    loginError.value =
+      error instanceof Error ? error.message : '登录失败，请检查后端是否启动和账号密码。'
+  } finally {
+    loginLoading.value = false
+  }
 }
-
 </script>
 
 <template>
@@ -387,6 +561,7 @@ function signInWithDemoRole() {
   <main id="page-main" class="inner-main" tabindex="-1">
     <template v-if="path === '/discover'">
       <section class="page-width discover-body" aria-label="浏览作品">
+        <h1 class="sr-only">发现作品</h1>
         <nav class="filter-row" aria-label="分类筛选">
           <button
             v-for="item in categoryOptions"
@@ -405,11 +580,23 @@ function signInWithDemoRole() {
         >
           <div class="collection-index-heading">
             <div>
-              <h1 id="collection-index-title">{{ category === 'illustration' ? '插画脉络' : '专题' }}</h1>
-              <p>{{ category === 'illustration' ? '从一个主题进入，再浏览全部作品' : '从一组完整的作品开始浏览' }}</p>
+              <h2 id="collection-index-title">
+                {{ category === 'illustration' ? '插画脉络' : '专题' }}
+              </h2>
+              <p>
+                {{
+                  category === 'illustration'
+                    ? '从一个主题进入，再浏览全部作品'
+                    : '从一组完整的作品开始浏览'
+                }}
+              </p>
             </div>
           </div>
-          <div v-if="category === 'illustration'" class="illustration-topic-grid" aria-label="插画主题">
+          <div
+            v-if="category === 'illustration'"
+            class="illustration-topic-grid"
+            aria-label="插画主题"
+          >
             <a
               v-for="item in featuredIllustrationTopics"
               :key="item.slug"
@@ -451,7 +638,7 @@ function signInWithDemoRole() {
         <section class="catalog-section" aria-labelledby="catalog-title">
           <div class="catalog-heading">
             <div>
-              <h1 id="catalog-title">全部作品</h1>
+              <h2 id="catalog-title">全部作品</h2>
               <p>{{ catalogWorks.length + loadedCatalogProducts.length }} 件可浏览内容</p>
             </div>
             <label class="catalog-sort">
@@ -463,17 +650,33 @@ function signInWithDemoRole() {
               </select>
             </label>
           </div>
-          <div v-if="visibleCatalogWorks.length || loadedCatalogProducts.length" class="catalog-grid">
-            <article v-for="item in visibleCatalogWorks" :key="`${item.category}-${item.title}`" class="catalog-work">
+          <div
+            v-if="visibleCatalogWorks.length || loadedCatalogProducts.length"
+            class="catalog-grid"
+          >
+            <article
+              v-for="item in visibleCatalogWorks"
+              :key="`${item.category}-${item.title}`"
+              class="catalog-work"
+            >
               <component
                 :is="collectionLink(item) ? 'a' : 'div'"
                 :href="collectionLink(item) || undefined"
                 class="catalog-work-art"
-                :class="[`art-${item.art}`, `variant-${item.variant}`, { 'is-static': !collectionLink(item) }]"
+                :class="[
+                  `art-${item.art}`,
+                  `variant-${item.variant}`,
+                  { 'is-static': !collectionLink(item) },
+                ]"
                 :aria-label="collectionLink(item) ? `查看系列：${item.title}` : undefined"
               >
                 <img v-if="item.image" :src="item.image" :alt="item.description" loading="lazy" />
-                <div v-else class="demo-piece" :class="[`demo-${item.category}`, `variant-${item.variant}`]" aria-hidden="true">
+                <div
+                  v-else
+                  class="demo-piece"
+                  :class="[`demo-${item.category}`, `variant-${item.variant}`]"
+                  aria-hidden="true"
+                >
                   <small>{{ item.mark }}</small>
                   <strong>{{ item.title }}</strong>
                   <div class="demo-shapes"><i></i><i></i><i></i><i></i></div>
@@ -485,7 +688,12 @@ function signInWithDemoRole() {
                 <p>{{ item.maker }}</p>
               </div>
             </article>
-            <a v-for="item in loadedCatalogProducts" :key="`api-${item.id}`" class="catalog-work" :href="`/products/${item.id}`">
+            <a
+              v-for="item in loadedCatalogProducts"
+              :key="`api-${item.id}`"
+              class="catalog-work"
+              :href="`/products/${item.id}`"
+            >
               <div class="catalog-work-art catalog-api-piece">
                 <span>{{ item.shopName }}</span>
                 <strong>{{ item.title }}</strong>
@@ -500,12 +708,17 @@ function signInWithDemoRole() {
           </div>
           <div v-else class="catalog-empty">
             <h2>这里还没有匹配的作品</h2>
-            <button class="button button-secondary" type="button" @click="clearFilters">清除筛选</button>
+            <button class="button button-secondary" type="button" @click="clearFilters">
+              清除筛选
+            </button>
           </div>
           <div v-if="hasMoreCatalogWorks" class="catalog-more">
-            <button class="button button-secondary" type="button" @click="loadMoreCatalogWorks">加载更多作品</button>
+            <button class="button button-secondary" type="button" @click="loadMoreCatalogWorks">
+              加载更多作品
+            </button>
           </div>
-        </section>      </section>
+        </section>
+      </section>
     </template>
 
     <template v-else-if="path === '/shops/northstar'">
@@ -537,7 +750,11 @@ function signInWithDemoRole() {
 
     <template v-else-if="isCollectionPath && collection">
       <div class="page-width collection-breadcrumb">
-        <a href="/discover">发现</a><span>/</span><a :href="`/discover?category=${collection.category}`">{{ collection.category === 'photography' ? '摄影' : '插画' }}</a><span>/</span><span>{{ collection.title }}</span>
+        <a href="/discover">发现</a><span>/</span
+        ><a :href="`/discover?category=${collection.category}`">{{
+          collection.category === 'photography' ? '摄影' : '插画'
+        }}</a
+        ><span>/</span><span>{{ collection.title }}</span>
       </div>
       <section class="page-width collection-layout" aria-labelledby="collection-title">
         <div class="collection-stage">
@@ -547,37 +764,58 @@ function signInWithDemoRole() {
             :aria-label="`放大查看图像：${activeCollectionImage?.alt}`"
             @click="openCollectionViewer"
           >
-            <img v-if="activeCollectionImage" :src="activeCollectionImage.src" :alt="activeCollectionImage.alt" />
+            <img
+              v-if="activeCollectionImage"
+              :src="activeCollectionImage.src"
+              :alt="activeCollectionImage.alt"
+            />
             <span class="collection-expand" aria-hidden="true">↗</span>
           </button>
-          <div class="collection-thumbs" role="tablist" aria-label="图集预览">
+          <div class="collection-thumbs" role="group" aria-label="图集预览">
             <button
               v-for="(image, index) in collection.images"
               :key="image.src"
               type="button"
-              role="tab"
-              :aria-selected="index === activeImageIndex"
+              :aria-pressed="index === activeImageIndex"
               :aria-label="`查看第 ${index + 1} 张：${image.alt}`"
               @click="selectCollectionImage(index)"
               @keydown.left.prevent="selectCollectionImage(index - 1)"
               @keydown.right.prevent="selectCollectionImage(index + 1)"
-            ><img :src="image.src" alt="" /></button>
+            >
+              <img :src="image.src" alt="" />
+            </button>
           </div>
         </div>
         <aside class="collection-info">
           <div>
-            <span class="quiet-label">{{ collection.category === 'photography' ? '摄影作品' : '插画作品' }}</span>
+            <span class="quiet-label">{{
+              collection.category === 'photography' ? '摄影作品' : '插画作品'
+            }}</span>
             <h1 id="collection-title">{{ collection.title }}</h1>
             <a class="collection-maker" href="/discover">{{ collection.maker }}</a>
           </div>
           <div class="collection-controls">
-            <p>{{ collection.images.length }} 张图像 <span>{{ activeImageIndex + 1 }} / {{ collection.images.length }}</span></p>
+            <p>
+              {{ collection.images.length }} 张图像
+              <span>{{ activeImageIndex + 1 }} / {{ collection.images.length }}</span>
+            </p>
             <div>
-              <button type="button" aria-label="上一张图像" @click="selectCollectionImage(activeImageIndex - 1)">←</button>
+              <button
+                type="button"
+                aria-label="上一张图像"
+                @click="selectCollectionImage(activeImageIndex - 1)"
+              >
+                ←
+              </button>
               <button type="button" aria-label="下一张图像" @click="openCollectionViewer">→</button>
             </div>
           </div>
-          <button class="collection-save" type="button" :aria-pressed="collectionSaved" @click="collectionSaved = !collectionSaved">
+          <button
+            class="collection-save"
+            type="button"
+            :aria-pressed="collectionSaved"
+            @click="collectionSaved = !collectionSaved"
+          >
             {{ collectionSaved ? '已收藏' : '收藏作品' }}
           </button>
           <p class="collection-summary">{{ collection.summary }}</p>
@@ -586,19 +824,29 @@ function signInWithDemoRole() {
       </section>
       <section id="collection-note" class="page-width collection-note">
         <h2>作品说明</h2>
-        <p>这是一组手动编排的展示图像。作品集归属由创作者或编辑配置，不依据题材或视觉相似度自动合并。</p>
+        <p>
+          这是一组手动编排的展示图像。作品集归属由创作者或编辑配置，不依据题材或视觉相似度自动合并。
+        </p>
       </section>
-      <section id="collection-images" class="page-width collection-sequence" aria-labelledby="collection-images-title">
+      <section
+        id="collection-images"
+        class="page-width collection-sequence"
+        aria-labelledby="collection-images-title"
+      >
         <header class="collection-sequence-head">
           <h2 id="collection-images-title">完整图集</h2>
           <p>{{ collection.images.length }} 张展示图</p>
         </header>
         <div class="collection-sequence-grid" :class="`collection-sequence-${collection.category}`">
-          <figure v-for="(image, index) in collection.images" :key="`sequence-${image.src}`" class="collection-sequence-item">
+          <figure
+            v-for="(image, index) in collection.images"
+            :key="`sequence-${image.src}`"
+            class="collection-sequence-item"
+          >
             <button
               type="button"
               :aria-label="`放大查看第 ${index + 1} 张：${image.alt}`"
-              @click="selectCollectionImage(index); openCollectionViewer()"
+              @click="openCollectionImage(index)"
             >
               <img :src="image.src" :alt="image.alt" loading="lazy" />
               <span aria-hidden="true">{{ String(index + 1).padStart(2, '0') }}</span>
@@ -612,8 +860,12 @@ function signInWithDemoRole() {
           <p>换一个主题，继续看完整图集。</p>
         </div>
         <nav class="collection-continue-links" aria-label="相关主题">
-          <a v-for="item in relatedTopics" :key="item.slug" :href="`/collections/${item.slug}`">{{ item.title }} <span aria-hidden="true">→</span></a>
-          <a class="underlined-link" :href="`/discover?category=${collection.category}`">更多{{ collectionCategoryLabel }}作品</a>
+          <a v-for="item in relatedTopics" :key="item.slug" :href="`/collections/${item.slug}`"
+            >{{ item.title }} <span aria-hidden="true">→</span></a
+          >
+          <a class="underlined-link" :href="`/discover?category=${collection.category}`"
+            >更多{{ collectionCategoryLabel }}作品</a
+          >
         </nav>
       </section>
       <dialog
@@ -624,14 +876,34 @@ function signInWithDemoRole() {
       >
         <div class="collection-viewer-shell">
           <header>
-            <p id="collection-viewer-title">{{ collection.title }} · {{ activeImageIndex + 1 }} / {{ collection.images.length }}</p>
-            <button type="button" aria-label="关闭图像查看器" @click="closeCollectionViewer">×</button>
+            <p id="collection-viewer-title">
+              {{ collection.title }} · {{ activeImageIndex + 1 }} / {{ collection.images.length }}
+            </p>
+            <button type="button" aria-label="关闭图像查看器" @click="closeCollectionViewer">
+              ×
+            </button>
           </header>
-          <img v-if="activeCollectionImage" :src="activeCollectionImage.src" :alt="activeCollectionImage.alt" />
+          <img
+            v-if="activeCollectionImage"
+            :src="activeCollectionImage.src"
+            :alt="activeCollectionImage.alt"
+          />
           <footer>
-            <button type="button" aria-label="上一张图像" @click="selectCollectionImage(activeImageIndex - 1)">←</button>
+            <button
+              type="button"
+              aria-label="上一张图像"
+              @click="selectCollectionImage(activeImageIndex - 1)"
+            >
+              ←
+            </button>
             <span>{{ activeCollectionImage?.alt }}</span>
-            <button type="button" aria-label="下一张图像" @click="selectCollectionImage(activeImageIndex + 1)">→</button>
+            <button
+              type="button"
+              aria-label="下一张图像"
+              @click="selectCollectionImage(activeImageIndex + 1)"
+            >
+              →
+            </button>
           </footer>
         </div>
       </dialog>
@@ -649,7 +921,11 @@ function signInWithDemoRole() {
           <div class="product-gallery">
             <div class="product-cover" :class="'product-cover-variant-' + activeImageIndex">
               <span>{{ activeProductPreview.eyebrow }}</span>
-              <strong>{{ activeProductPreview.title }}<br /><i>{{ activeProductPreview.subtitle }}</i></strong>
+              <strong
+                >{{ activeProductPreview.title }}<br /><i>{{
+                  activeProductPreview.subtitle
+                }}</i></strong
+              >
               <div class="product-cover-rule"></div>
               <small>{{ activeProductPreview.footer }}</small>
             </div>
@@ -691,7 +967,9 @@ function signInWithDemoRole() {
                   :aria-label="score + ' 星'"
                   :aria-pressed="localRating === score"
                   @click="setLocalRating(score)"
-                >★</button>
+                >
+                  ★
+                </button>
               </div>
               <p v-if="ratingNotice" role="status">{{ ratingNotice }}</p>
             </section>
@@ -712,21 +990,31 @@ function signInWithDemoRole() {
                 :aria-pressed="selectedPackage === option.id"
                 @click="selectedPackage = option.id"
               >
-                <span><strong>{{ option.name }}</strong><small>{{ packageOptionDescription(option.name) }}</small></span
+                <span
+                  ><strong>{{ option.name }}</strong
+                  ><small>{{ packageOptionDescription(option.name) }}</small></span
                 ><b>{{ yuan(option.priceCents) }}</b>
               </button>
             </div>
-            <section v-if="displayProduct.packages.length" class="package-delivery" aria-live="polite">
+            <section
+              v-if="displayProduct.packages.length"
+              class="package-delivery"
+              aria-live="polite"
+            >
               <h3>{{ packageOption.name }} 包含</h3>
-              <ul><li v-for="item in selectedPackagePresentation.items" :key="item">{{ item }}</li></ul>
+              <ul>
+                <li v-for="item in selectedPackagePresentation.items" :key="item">{{ item }}</li>
+              </ul>
               <p>{{ selectedPackagePresentation.note }}</p>
             </section>
-            <p class="product-terms">文件格式、授权与交付内容以正式发布信息为准</p>
+            <p class="product-terms">
+              购买后获得所选套餐的版本、文件清单与下载权限；每次下载都会重新核对当前权益
+            </p>
             <a
               v-if="displayProduct.packages.length"
               class="button button-primary product-action"
               :href="`/checkout?product=${displayProduct.id}&package=${selectedPackage}`"
-              >继续购买</a
+              >购买 {{ packageOption.name }} · {{ yuan(packageOption.priceCents) }}</a
             >
             <p v-else class="inline-note">暂无可选套餐</p>
             <a v-if="displayProduct.id === 1001" class="shop-return" href="/shops/northstar"
@@ -754,7 +1042,13 @@ function signInWithDemoRole() {
         <a class="back-link" :href="`/products/${displayProduct.id}`">← 返回作品详情</a>
         <div class="form-page-head">
           <h1>确认购买</h1>
-          <p>演示购买仅保存在当前浏览器</p>
+          <p>
+            {{
+              product
+                ? '确认作品、套餐和金额，然后创建一笔可追踪的订单'
+                : '交易服务暂时不可用，当前不会创建订单'
+            }}
+          </p>
         </div>
         <div class="checkout-layout">
           <div class="checkout-main">
@@ -778,17 +1072,35 @@ function signInWithDemoRole() {
             <section class="quiet-panel">
               <h2>购买前确认</h2>
               <ul class="check-list">
-                <li>文件内容与格式以作品发布信息为准</li>
-                <li>付款完成后，购买记录将在内容库中查看</li>
-                <li>退款和授权范围以正式规则为准</li>
+                <li>购买成功后将获得 {{ packageOption.name }} 套餐的访问权益</li>
+                <li>权益来源与这笔订单绑定，可在内容库和订单详情中核对</li>
+                <li>当前为本地测试支付，不会产生真实扣款</li>
               </ul>
             </section>
           </div>
           <aside class="checkout-summary">
             <span>本次金额</span><strong>{{ yuan(packageOption.priceCents) }}</strong>
-            <p v-if="checkoutRequiresSignIn" class="checkout-login-hint">登录后才能保存购买记录与访问授权。</p>
-            <button class="button button-primary" type="button" @click="completeDemoPurchase">{{ checkoutRequiresSignIn ? '登录后继续' : '完成演示购买' }}</button
-            ><a href="/checkout/result">查看其他支付状态 ↗</a>
+            <p v-if="checkoutRequiresSignIn" class="checkout-login-hint">
+              登录后才能保存购买记录与访问授权。
+            </p>
+            <p v-else-if="demoAccountsVisible" class="checkout-login-hint">
+              本地学习环境 · 不会产生真实扣款
+            </p>
+            <p v-if="orderError" class="form-error" role="alert">{{ orderError }}</p>
+            <button
+              class="button button-primary"
+              type="button"
+              :disabled="orderLoading || !product"
+              @click="completeDemoPurchase"
+            >
+              {{
+                checkoutRequiresSignIn
+                  ? '登录后继续'
+                  : orderLoading
+                    ? '正在确认购买…'
+                    : `确认购买 · ${yuan(packageOption.priceCents)}`
+              }}
+            </button>
           </aside>
         </div>
       </div>
@@ -808,138 +1120,107 @@ function signInWithDemoRole() {
 
     <template v-else-if="path === '/checkout/result'">
       <div class="page-width narrow-page result-page">
-        <h1>支付状态预览</h1>
-        <p>以下状态不对应真实订单</p>
-        <div class="state-switch" role="group" aria-label="预览购买状态">
-          <button
-            v-for="item in [
-              { value: 'waiting', label: '等待支付' },
-              { value: 'checking', label: '正在确认' },
-              { value: 'ready', label: '已可使用' },
-              { value: 'late', label: '确认延迟' },
-            ]"
-            :key="item.value"
-            type="button"
-            :aria-pressed="resultState === item.value"
-            @click="resultState = item.value as typeof resultState"
-          >
-            {{ item.label }}
-          </button>
-        </div>
+        <h1>
+          {{
+            resultLoading
+              ? '正在确认订单'
+              : resultHasActiveEntitlement
+                ? '购买完成'
+                : resultOrder?.status === 'PAID'
+                  ? '订单已支付'
+                  : '订单已创建'
+          }}
+        </h1>
+        <p v-if="resultOrder">
+          订单 #{{ resultOrder.id }} · {{ resultOrder.productTitle }} ·
+          {{ resultOrder.packageName }}
+        </p>
+        <p v-else-if="resultError">没有找到可展示的真实订单状态。</p>
         <div class="result-paper">
-          <span class="result-symbol" :class="resultState">{{
-            resultState === 'ready' ? '✓' : resultState === 'late' ? '!' : '↗'
-          }}</span>
-          <h2>
-            {{
-              {
-                waiting: '等待完成支付',
-                checking: '正在确认付款',
-                ready: '作品已加入内容库',
-                late: '确认延迟',
-              }[resultState]
-            }}
-          </h2>
-          <p>
-            {{
-              {
-                waiting: '完成支付后，订单会自动更新',
-                checking: '正在核对支付结果，请稍候再查看',
-                ready: '你可以从内容库查看已获得的作品',
-                late: '请勿重复付款，稍后查看订单状态或联系支持',
-              }[resultState]
-            }}
+          <span
+            class="result-symbol"
+            :class="
+              resultError || resultHasUnavailableEntitlement
+                ? 'late'
+                : resultHasActiveEntitlement
+                  ? 'ready'
+                  : 'waiting'
+            "
+            aria-hidden="true"
+            >{{
+              resultLoading
+                ? '…'
+                : resultError || resultHasUnavailableEntitlement
+                  ? '!'
+                  : resultHasActiveEntitlement
+                    ? '✓'
+                    : '·'
+            }}</span
+          >
+          <h2 v-if="resultLoading">正在从后端读取订单</h2>
+          <h2 v-else-if="resultError">暂时无法读取订单</h2>
+          <h2 v-else-if="resultHasActiveEntitlement">访问权益已经生效</h2>
+          <h2 v-else-if="resultOrder?.entitlementStatus === 'REVOKED'">访问权益已经撤销</h2>
+          <h2 v-else-if="resultHasUnavailableEntitlement">订单已支付，权益正在恢复</h2>
+          <h2 v-else>订单正在等待支付</h2>
+          <p v-if="resultLoading">请稍候，这里只会显示后端确认过的真实状态。</p>
+          <p v-else-if="resultError">{{ resultError }}</p>
+          <p v-else-if="resultHasActiveEntitlement">
+            作品已经加入你的内容库。每个订单项只会生成一份权益，重复支付通知不会重复发放。
           </p>
+          <p v-else-if="resultOrder?.entitlementStatus === 'REVOKED'">
+            这笔订单的来源权益当前不可用。内容库只展示有效权益，请从订单详情核对状态。
+          </p>
+          <p v-else-if="resultHasUnavailableEntitlement">
+            系统没有确认到有效权益，因此不会把作品显示为可访问。请重新读取状态；仍未恢复时保留订单号排查。
+          </p>
+          <p v-else>
+            订单已经安全保存。当前学习环境未接入真实收款渠道，可用下方测试按钮完成支付闭环。
+          </p>
+          <p v-if="paymentError" class="form-error" role="alert">{{ paymentError }}</p>
+          <p v-if="paymentNotice" class="inline-note" role="status">{{ paymentNotice }}</p>
           <div class="result-actions">
-            <a class="button button-secondary" href="/library">查看内容库</a
-            ><a class="underlined-link" href="/orders/demo">预览订单详情 ↗</a>
-          </div>
-        </div>
-      </div>
-    </template>
-
-    <template v-else-if="path === '/library'">
-      <div class="page-width workspace-layout account-layout">
-        <AccountSidebar active="library" />
-        <div class="workspace-content library-page">
-          <div class="workspace-heading">
-            <h1>内容库</h1>
-            <p>已购作品与版本更新</p>
-          </div>
-          <div v-if="!localPurchases.length" class="preview-ribbon">
-            <span>账户与授权接口未接入，以下为状态示例</span
-            ><button type="button" @click="showLibraryPreview = !showLibraryPreview">
-              {{ showLibraryPreview ? '查看真实空状态' : '预览已购状态' }}
-            </button>
-          </div>
-          <div v-if="!libraryEntries.length" class="empty-state library-empty">
-            <div class="empty-mark">✳</div>
-            <h2>暂无已购作品</h2>
-            <p>购买后可在这里查看作品</p>
-            <a class="button button-primary" href="/discover">去发现作品</a>
-          </div>
-          <div v-else class="library-list">
-            <article v-for="purchase in libraryEntries" :key="purchase.id" class="library-preview">
-              <div class="library-item-art">
-                <span>{{ purchase.shopName }}</span><strong>{{ purchase.title }}</strong>
-              </div>
-              <div class="library-item-copy">
-                <span class="demo-badge">{{ purchase.id === 'preview-order' ? '状态示例 · 非真实购买' : '本机演示记录' }}</span>
-                <h2>{{ purchase.title }}</h2>
-                <p>{{ purchase.packageName }} 套餐 · 获得于 {{ formatPurchaseDate(purchase.purchasedAt) }}</p>
-                <div class="library-status">
-                  <span>已获得访问权限</span><small>版本更新将在这里显示</small>
-                </div>
-                <p class="muted">下载与文件访问需验证真实授权，当前不可用</p>
-                <button class="button button-secondary" type="button" disabled>等待内容库接口接入</button>
-                <a :href="`/orders/demo?order=${purchase.id}`">查看订单详情</a>
-              </div>
-            </article>
-          </div>
-        </div>
-      </div>
-    </template>
-
-    <template v-else-if="path === '/orders/demo'">
-      <div class="page-width workspace-layout account-layout">
-        <AccountSidebar active="orders" />
-        <div class="workspace-content order-page">
-          <div class="workspace-heading">
-            <h1>订单记录</h1>
-            <p>购买记录与授权状态</p>
-          </div>
-          <div v-if="!localPurchases.length" class="preview-ribbon">
-            <span>订单接口未接入，以下为状态示例</span
-            ><button type="button" @click="showOrderPreview = !showOrderPreview">
-              {{ showOrderPreview ? '查看真实空状态' : '预览订单示例' }}
-            </button>
-          </div>
-          <div v-if="!orderEntries.length" class="empty-state">
-            <h2>暂无订单</h2>
-            <p>购买后可在这里查看状态</p>
-            <a class="button button-secondary" href="/discover">继续探索</a>
-          </div>
-          <section v-else class="order-list" aria-label="购买订单列表">
-            <article
-              v-for="purchase in orderEntries"
-              :key="purchase.id"
-              class="order-sheet"
-              :class="{ 'is-current': purchase.id === activeOrderId }"
-              :aria-current="purchase.id === activeOrderId ? 'true' : undefined"
+            <button
+              v-if="demoAccountsVisible && resultOrder?.status === 'PENDING_PAYMENT'"
+              class="button button-primary"
+              type="button"
+              :disabled="paymentLoading"
+              @click="completeLocalTestPayment"
             >
-              <div><span>订单编号</span><strong>#{{ purchase.id.slice(-6) }}</strong></div>
-              <div><span>作品</span><strong>{{ purchase.title }}</strong></div>
-              <div><span>套餐</span><strong>{{ purchase.packageName }}</strong></div>
-              <div><span>购买时间</span><strong>{{ formatPurchaseDate(purchase.purchasedAt) }}</strong></div>
-              <div><span>访问状态</span><strong>已获得授权</strong></div>
-              <p>{{ purchase.id === 'preview-order' ? '这是演示状态，不会创建真实订单或访问权限。' : '下载权限与退款状态将在接入真实订单和授权接口后更新。' }}</p>
-            </article>
-          </section>
+              {{ paymentLoading ? '正在确认测试支付…' : '完成本地测试购买' }}
+            </button>
+            <button
+              v-if="resultError"
+              class="button button-secondary"
+              type="button"
+              :disabled="resultLoading"
+              @click="loadResultOrder"
+            >
+              重新读取订单
+            </button>
+            <button
+              v-if="resultHasUnavailableEntitlement"
+              class="button button-secondary"
+              type="button"
+              :disabled="resultLoading"
+              @click="loadResultOrder"
+            >
+              重新核对权益
+            </button>
+            <a v-if="resultHasActiveEntitlement" class="button button-primary" href="/library"
+              >查看已购内容</a
+            >
+            <a v-if="resultOrder" class="underlined-link" :href="`/orders/${resultOrder.id}`"
+              >查看订单详情</a
+            >
+            <a v-else-if="!resultLoading" class="underlined-link" href="/discover">返回发现页</a>
+          </div>
         </div>
       </div>
     </template>
 
-    <template v-else-if="path === '/login'">      <div class="page-width login-layout">
+    <template v-else-if="path === '/login'">
+      <div class="page-width login-layout">
         <div class="login-art">
           <img src="/images/creator-studio-1280.webp" alt="阳光下摆着纸张与色卡的创作桌面" />
         </div>
@@ -951,6 +1232,7 @@ function signInWithDemoRole() {
               id="login-email"
               type="email"
               required
+              v-model="loginEmail"
               autocomplete="email"
               placeholder="name@example.com"
             /><label for="login-password">密码</label
@@ -958,22 +1240,57 @@ function signInWithDemoRole() {
               id="login-password"
               type="password"
               required
+              v-model="loginPassword"
               autocomplete="current-password"
               placeholder="输入密码"
             />
-            <div class="state-switch login-role-switch" role="group" aria-label="选择演示身份">
-              <button type="button" :aria-pressed="loginRole === 'user'" @click="loginRole = 'user'">用户</button>
-              <button type="button" :aria-pressed="loginRole === 'creator'" @click="loginRole = 'creator'">店家</button>
-              <button type="button" :aria-pressed="loginRole === 'admin'" @click="loginRole = 'admin'">管理员</button>
+            <div
+              v-if="demoAccountsVisible"
+              class="state-switch login-role-switch"
+              role="group"
+              aria-label="选择演示身份"
+            >
+              <button
+                type="button"
+                :aria-pressed="loginRole === 'user'"
+                @click="selectLoginRole('user')"
+              >
+                用户
+              </button>
+              <button
+                type="button"
+                :aria-pressed="loginRole === 'creator'"
+                @click="selectLoginRole('creator')"
+              >
+                店家
+              </button>
+              <button
+                type="button"
+                :aria-pressed="loginRole === 'admin'"
+                @click="selectLoginRole('admin')"
+              >
+                管理员
+              </button>
             </div>
-            <button class="button button-primary" type="submit">进入演示</button>
+            <button class="button button-primary" type="submit" :disabled="loginLoading">
+              {{ loginLoading ? '正在登录…' : '登录' }}
+            </button>
           </form>
-          <p class="login-intent">
-            当前演示身份：<strong>{{ loginRole === 'creator' ? '创作者 / 店家' : loginRole === 'admin' ? '管理员' : '普通用户' }}</strong>
-            · 登录后会进入对应工作区
+          <p v-if="demoAccountsVisible" class="login-intent">
+            当前演示身份：<strong>{{
+              loginRole === 'creator'
+                ? '创作者 / 店家'
+                : loginRole === 'admin'
+                  ? '管理员'
+                  : '普通用户'
+            }}</strong>
+            · 本地演示账号密码均为 password
           </p>
           <p v-if="signInNotice" class="inline-note" role="status">
-            登录接口尚未接入，当前不会提交账户信息
+            {{ signInNotice }}
+          </p>
+          <p v-if="loginError" class="inline-note login-error" role="alert">
+            {{ loginError }}
           </p>
           <a class="underlined-link" href="/discover">先看看作品 ↗</a>
         </div>

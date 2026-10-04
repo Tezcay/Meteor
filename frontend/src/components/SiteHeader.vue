@@ -32,6 +32,11 @@ function login() {
   emit('login')
 }
 
+function openMobileSearch() {
+  menuOpen.value = false
+  openSearch(true)
+}
+
 function closeOnEscape() {
   if (!menuOpen.value) return
   menuOpen.value = false
@@ -79,7 +84,7 @@ function closeOnEscape() {
       </button>
     </div>
     <nav id="mobile-navigation" class="mobile-nav" :hidden="!menuOpen" aria-label="移动端导航">
-      <button type="button" @click="menuOpen = false; openSearch(true)">搜索作品</button>
+      <button type="button" @click="openMobileSearch">搜索作品</button>
       <a href="/discover" @click="menuOpen = false">浏览全部</a>
       <a href="/creator/start" @click="menuOpen = false">发布作品</a>
       <button type="button" @click="login">登录</button>

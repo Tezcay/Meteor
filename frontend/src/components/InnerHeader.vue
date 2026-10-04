@@ -6,6 +6,7 @@ import SearchDialog from './SearchDialog.vue'
 
 const props = defineProps<{ section?: string }>()
 const menuOpen = ref(false)
+const menuButton = ref<HTMLButtonElement | null>(null)
 const searchDialog = ref<InstanceType<typeof SearchDialog> | null>(null)
 const role = ref(getLocalRole())
 
@@ -14,15 +15,22 @@ const workspaceTitle = computed(() =>
   props.section === 'admin' ? '管理后台' : props.section === 'creator' ? '创作中心' : '我的账户',
 )
 const workspaceDescription = computed(() =>
-  props.section === 'admin' ? '审核与售后' : props.section === 'creator' ? '作品与订单' : '已购内容与订单',
+  props.section === 'admin'
+    ? '审核与售后'
+    : props.section === 'creator'
+      ? '作品与订单'
+      : '已购内容与订单',
 )
-const accountLabel = computed(() => role.value === 'visitor' ? '登录' : '账户')
-const accountHref = computed(() => ({
-  visitor: '/login',
-  user: '/library',
-  creator: '/creator/works',
-  admin: '/admin/reviews',
-})[role.value])
+const accountLabel = computed(() => (role.value === 'visitor' ? '登录' : '账户'))
+const accountHref = computed(
+  () =>
+    ({
+      visitor: '/login',
+      user: '/library',
+      creator: '/creator/works',
+      admin: '/admin/reviews',
+    })[role.value],
+)
 
 function syncRole() {
   role.value = getLocalRole()
@@ -30,6 +38,12 @@ function syncRole() {
 
 function openSearch() {
   searchDialog.value?.open('all', true)
+}
+
+function closeMenu(returnFocus = false) {
+  if (!menuOpen.value) return
+  menuOpen.value = false
+  if (returnFocus) nextTick(() => menuButton.value?.focus())
 }
 
 onMounted(async () => {
@@ -48,7 +62,11 @@ onBeforeUnmount(() => {
 
 <template>
   <a class="skip-link" href="#page-main">跳到主要内容</a>
-  <header class="inner-header" :class="{ 'inner-header-workspace': isWorkspace }">
+  <header
+    class="inner-header"
+    :class="{ 'inner-header-workspace': isWorkspace }"
+    @keydown.esc="closeMenu(true)"
+  >
     <div class="inner-header-row page-width">
       <BrandLogo />
       <div v-if="isWorkspace" class="workspace-context" aria-label="当前工作区">
@@ -63,7 +81,7 @@ onBeforeUnmount(() => {
       <div class="inner-actions">
         <template v-if="isWorkspace">
           <a class="workspace-return" href="/discover">浏览站点</a>
-          <a class="inner-account" href="/login">切换身份</a>
+          <a class="inner-account" href="/login">切换账号</a>
         </template>
         <template v-else>
           <button class="inner-search" type="button" aria-label="搜索作品" @click="openSearch">
@@ -76,6 +94,7 @@ onBeforeUnmount(() => {
           <a class="inner-account" :href="accountHref">{{ accountLabel }}</a>
         </template>
         <button
+          ref="menuButton"
           class="inner-menu-button"
           type="button"
           :aria-expanded="menuOpen"
@@ -95,10 +114,11 @@ onBeforeUnmount(() => {
       id="inner-mobile-nav"
       class="inner-mobile-nav page-width"
       aria-label="移动端导航"
+      @click="closeMenu()"
     >
       <template v-if="isWorkspace">
         <a href="/discover">浏览站点</a>
-        <a href="/login">切换身份</a>
+        <a href="/login">切换账号</a>
       </template>
       <template v-else>
         <a href="/discover">发现</a>

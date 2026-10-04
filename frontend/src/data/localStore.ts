@@ -54,7 +54,10 @@ function readState(): LocalState {
     const purchases = Array.isArray(parsed.purchases)
       ? parsed.purchases
           .filter((purchase): purchase is LocalPurchase => Boolean(purchase?.productId))
-          .map((purchase, index) => ({ ...purchase, id: purchase.id || `legacy-list-${purchase.productId}-${index}` }))
+          .map((purchase, index) => ({
+            ...purchase,
+            id: purchase.id || `legacy-list-${purchase.productId}-${index}`,
+          }))
       : legacyPurchase
         ? [legacyPurchase]
         : []
@@ -134,7 +137,8 @@ export function saveLocalPurchase(purchase: Omit<LocalPurchase, 'id' | 'purchase
   }
   state.purchases = [nextPurchase, ...state.purchases]
   writeState(state)
-  if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('meteor:purchases-change'))
+  if (typeof window !== 'undefined')
+    window.dispatchEvent(new CustomEvent('meteor:purchases-change'))
   return nextPurchase
 }
 

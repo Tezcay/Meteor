@@ -15,7 +15,10 @@ const activeCategory = ref<DiscoveryCategory>('all')
 let revealObserver: IntersectionObserver | null = null
 
 onMounted(() => {
-  if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+  if (
+    !('IntersectionObserver' in window) ||
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
     return
   revealObserver = new IntersectionObserver(
     (entries) => {
@@ -27,10 +30,12 @@ onMounted(() => {
     },
     { rootMargin: '0px 0px -20px 0px', threshold: 0.08 },
   )
-  document.querySelectorAll('.inspiration-topic, .creator-image, .creator-copy').forEach((element) => {
-    element.classList.add('can-reveal')
-    revealObserver?.observe(element)
-  })
+  document
+    .querySelectorAll('.inspiration-topic, .creator-image, .creator-copy')
+    .forEach((element) => {
+      element.classList.add('can-reveal')
+      revealObserver?.observe(element)
+    })
 })
 onBeforeUnmount(() => revealObserver?.disconnect())
 

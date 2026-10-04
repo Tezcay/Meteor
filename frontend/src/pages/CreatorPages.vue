@@ -2,7 +2,14 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import InnerHeader from '../components/InnerHeader.vue'
 import { categoryTaxonomy, categories } from '../data/categories'
-import { getLocalProfile, getLocalWorks, saveLocalProfile, saveLocalWork, updateLocalWorkStatus, type LocalWork } from '../data/localStore'
+import {
+  getLocalProfile,
+  getLocalWorks,
+  saveLocalProfile,
+  saveLocalWork,
+  updateLocalWorkStatus,
+  type LocalWork,
+} from '../data/localStore'
 import type { DiscoveryCategory } from '../types/discovery'
 
 const props = defineProps<{ path: string }>()
@@ -47,8 +54,8 @@ const statusLabels: Record<LocalWork['status'], string> = {
   rejected: '需修改',
 }
 const reviewWorkId = ref('')
-const reviewWork = computed(() =>
-  localWorks.value.find((work) => work.id === reviewWorkId.value) ?? localWorks.value[0],
+const reviewWork = computed(
+  () => localWorks.value.find((work) => work.id === reviewWorkId.value) ?? localWorks.value[0],
 )
 const workCount = computed(() => localWorks.value.length)
 
@@ -59,12 +66,16 @@ const workTags = computed(() =>
     .filter(Boolean)
     .slice(0, 8),
 )
-watch(reviewWork, (work) => {
-  if (work) {
-    if (!reviewWorkId.value) reviewWorkId.value = work.id
-    reviewTab.value = work.status
-  }
-}, { immediate: true })
+watch(
+  reviewWork,
+  (work) => {
+    if (work) {
+      if (!reviewWorkId.value) reviewWorkId.value = work.id
+      reviewTab.value = work.status
+    }
+  },
+  { immediate: true },
+)
 
 function statusLabel(status: LocalWork['status']) {
   return statusLabels[status]
@@ -74,7 +85,9 @@ function categoryLabel(value: string) {
 }
 function formatWorkDate(value: string) {
   const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? '刚刚更新' : new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(date)
+  return Number.isNaN(date.getTime())
+    ? '刚刚更新'
+    : new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(date)
 }
 function selectReviewWork(id: string) {
   reviewWorkId.value = id
@@ -92,7 +105,9 @@ function setReviewStatus(status: LocalWork['status']) {
 
 const previewCover = computed(() => previewImages.value[0])
 const previewImageNames = computed(() =>
-  previewImages.value.length ? previewImages.value.map((item) => item.name) : restoredPreviewNames.value,
+  previewImages.value.length
+    ? previewImages.value.map((item) => item.name)
+    : restoredPreviewNames.value,
 )
 
 function restoreDraft() {
@@ -124,8 +139,14 @@ function addPreviewImages(event: Event) {
   const selected = Array.from(input.files ?? []).filter((file) => file.type.startsWith('image/'))
   previewImages.value.forEach((item) => URL.revokeObjectURL(item.url))
   restoredPreviewNames.value = []
-  previewImages.value = selected.map((file, index) => ({ id: Date.now() + index, name: file.name, url: URL.createObjectURL(file) }))
-  editorNotice.value = previewImages.value.length ? '预览图已加入队列，第一张将作为封面' : '请选择 JPG、PNG 或 WEBP 图片'
+  previewImages.value = selected.map((file, index) => ({
+    id: Date.now() + index,
+    name: file.name,
+    url: URL.createObjectURL(file),
+  }))
+  editorNotice.value = previewImages.value.length
+    ? '预览图已加入队列，第一张将作为封面'
+    : '请选择 JPG、PNG 或 WEBP 图片'
   input.value = ''
 }
 function movePreview(index: number, direction: -1 | 1) {
@@ -184,7 +205,10 @@ function submitForReview() {
 }
 
 function saveOnboarding() {
-  saveLocalProfile({ displayName: displayName.value.trim(), introduction: introduction.value.trim() })
+  saveLocalProfile({
+    displayName: displayName.value.trim(),
+    introduction: introduction.value.trim(),
+  })
   onboardingSubmitted.value = true
 }
 </script>
@@ -253,7 +277,9 @@ function saveOnboarding() {
           <a class="button button-primary" href="/creator/releases/new">新建发布</a>
         </div>
         <div class="preview-ribbon">
-          <span>{{ localWorks.length ? `当前浏览器已保存 ${localWorks.length} 件作品` : '还没有本地作品' }}</span
+          <span>{{
+            localWorks.length ? `当前浏览器已保存 ${localWorks.length} 件作品` : '还没有本地作品'
+          }}</span
           ><a href="/creator/start">编辑入驻资料 ↗</a>
         </div>
         <div class="works-feature">
@@ -263,12 +289,22 @@ function saveOnboarding() {
           <div class="works-feature-copy">
             <span class="demo-badge">作品示例</span>
             <h2>{{ localWorks[0]?.title ?? '求职材料模板包' }}</h2>
-            <p>{{ localWorks[0] ? `${localWorks[0].version} · ${localWorks[0].status === 'review' ? '审核中' : '草稿已保存'}` : '界面示例' }}</p>
+            <p>
+              {{
+                localWorks[0]
+                  ? `${localWorks[0].version} · ${localWorks[0].status === 'review' ? '审核中' : '草稿已保存'}`
+                  : '界面示例'
+              }}
+            </p>
             <div class="work-statuses"><span>已上架</span><span>候选版本审核中</span></div>
             <a class="underlined-link" href="/creator/review">查看审核状态 ↗</a>
           </div>
         </div>
-        <section v-if="localWorks.length" class="creator-work-list" aria-labelledby="creator-work-list-title">
+        <section
+          v-if="localWorks.length"
+          class="creator-work-list"
+          aria-labelledby="creator-work-list-title"
+        >
           <div class="creator-work-list-head">
             <div>
               <h2 id="creator-work-list-title">已保存作品</h2>
@@ -279,20 +315,29 @@ function saveOnboarding() {
           <div class="creator-work-grid">
             <article v-for="work in localWorks" :key="work.id" class="creator-work-card">
               <div class="creator-work-card-head">
-                <span :class="`work-status work-status-${work.status}`">{{ statusLabel(work.status) }}</span>
+                <span :class="`work-status work-status-${work.status}`">{{
+                  statusLabel(work.status)
+                }}</span>
                 <small>{{ formatWorkDate(work.updatedAt) }}</small>
               </div>
               <h3>{{ work.title }}</h3>
               <p>{{ work.summary || '尚未填写作品简介' }}</p>
               <div class="creator-work-card-meta">
                 <span>{{ categoryLabel(work.category) }} · {{ work.subcategory }}</span>
-                <span>{{ work.previewImages?.length ?? 0 }} 张预览 · {{ work.files.length }} 个文件</span>
+                <span
+                  >{{ work.previewImages?.length ?? 0 }} 张预览 ·
+                  {{ work.files.length }} 个文件</span
+                >
               </div>
               <div v-if="work.tags.length" class="creator-work-card-tags">
                 <span v-for="tag in work.tags.slice(0, 3)" :key="tag">{{ tag }}</span>
               </div>
               <div class="creator-work-card-actions">
-                <a v-if="work.status === 'draft' || work.status === 'rejected'" href="/creator/releases/new">继续编辑 ↗</a>
+                <a
+                  v-if="work.status === 'draft' || work.status === 'rejected'"
+                  href="/creator/releases/new"
+                  >继续编辑 ↗</a
+                >
                 <a v-else href="/creator/review">查看状态 ↗</a>
               </div>
             </article>
@@ -349,19 +394,32 @@ function saveOnboarding() {
                 <div>
                   <label for="work-category">大类</label>
                   <select id="work-category" v-model="workCategory">
-                    <option v-for="item in categories" :key="item.value" :value="item.value">{{ item.label }}</option>
+                    <option v-for="item in categories" :key="item.value" :value="item.value">
+                      {{ item.label }}
+                    </option>
                   </select>
                 </div>
                 <div>
                   <label for="work-subcategory">小类</label>
                   <select id="work-subcategory" v-model="workSubcategory">
-                    <option v-for="item in categoryTaxonomy[workCategory]" :key="item.value" :value="item.value">{{ item.label }}</option>
+                    <option
+                      v-for="item in categoryTaxonomy[workCategory]"
+                      :key="item.value"
+                      :value="item.value"
+                    >
+                      {{ item.label }}
+                    </option>
                   </select>
                 </div>
               </div>
               <div class="editor-form">
                 <label for="work-tags">标签</label>
-                <input id="work-tags" v-model="tagInput" maxlength="120" placeholder="例如：建筑光影，极简，自然光" />
+                <input
+                  id="work-tags"
+                  v-model="tagInput"
+                  maxlength="120"
+                  placeholder="例如：建筑光影，极简，自然光"
+                />
               </div>
             </section>
             <section class="editor-section">
@@ -394,26 +452,56 @@ function saveOnboarding() {
               <label class="file-drop" for="preview-files"
                 ><strong>加入预览图，随后调整顺序</strong
                 ><span>仅在当前浏览器生成预览，不会上传</span
-                ><input id="preview-files" type="file" accept="image/*" multiple @change="addPreviewImages"
+                ><input
+                  id="preview-files"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  @change="addPreviewImages"
               /></label>
               <div v-if="previewImages.length" class="preview-queue" aria-label="预览图队列">
-                <article v-for="(item, index) in previewImages" :key="item.id" class="preview-queue-item">
+                <article
+                  v-for="(item, index) in previewImages"
+                  :key="item.id"
+                  class="preview-queue-item"
+                >
                   <img :src="item.url" :alt="item.name" />
                   <div>
                     <strong>{{ index === 0 ? '封面' : `第 ${index + 1} 张` }}</strong>
                     <span>{{ item.name }}</span>
                   </div>
                   <div class="preview-queue-actions">
-                    <button type="button" :disabled="index === 0" aria-label="上移" @click="movePreview(index, -1)">↑</button>
-                    <button type="button" :disabled="index === previewImages.length - 1" aria-label="下移" @click="movePreview(index, 1)">↓</button>
-                    <button type="button" aria-label="移除预览图" @click="removePreview(index)">×</button>
+                    <button
+                      type="button"
+                      :disabled="index === 0"
+                      aria-label="上移"
+                      @click="movePreview(index, -1)"
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      :disabled="index === previewImages.length - 1"
+                      aria-label="下移"
+                      @click="movePreview(index, 1)"
+                    >
+                      ↓
+                    </button>
+                    <button type="button" aria-label="移除预览图" @click="removePreview(index)">
+                      ×
+                    </button>
                   </div>
                 </article>
               </div>
-              <div v-if="!previewImages.length && restoredPreviewNames.length" class="preview-restored">
+              <div
+                v-if="!previewImages.length && restoredPreviewNames.length"
+                class="preview-restored"
+              >
                 <strong>草稿中的预览图</strong>
                 <span>文件仍在草稿记录中，重新选择后可恢复视觉预览</span>
-                <ul><li v-for="name in restoredPreviewNames" :key="name">{{ name }}</li></ul>
+                <ul>
+                  <li v-for="name in restoredPreviewNames" :key="name">{{ name }}</li>
+                </ul>
               </div>
             </section>
             <section class="editor-section">
@@ -436,20 +524,26 @@ function saveOnboarding() {
             <div class="editor-actions">
               <button class="button button-secondary" type="button" @click="savePreview">
                 检查草稿状态</button
-              ><button class="button button-primary" type="button" @click="submitForReview">提交审核</button>
+              ><button class="button button-primary" type="button" @click="submitForReview">
+                提交审核
+              </button>
             </div>
             <p v-if="editorNotice" class="inline-note" role="status">{{ editorNotice }}</p>
           </div>
           <aside class="release-aside">
             <section class="release-preview" aria-label="发布前预览">
-              <div class="release-preview-head"><span>实时预览</span><small>{{ previewImageNames.length }} 张预览图</small></div>
+              <div class="release-preview-head">
+                <span>实时预览</span><small>{{ previewImageNames.length }} 张预览图</small>
+              </div>
               <div class="release-preview-cover">
                 <img v-if="previewCover" :src="previewCover.url" alt="作品封面预览" />
                 <span v-else>上传预览图后<br />这里会显示封面</span>
               </div>
               <h2>{{ editorTitle.trim() || '未命名作品' }}</h2>
               <p>{{ editorSummary.trim() || '一句话介绍会显示在这里' }}</p>
-              <div v-if="workTags.length" class="release-preview-tags"><span v-for="tag in workTags" :key="tag">{{ tag }}</span></div>
+              <div v-if="workTags.length" class="release-preview-tags">
+                <span v-for="tag in workTags" :key="tag">{{ tag }}</span>
+              </div>
             </section>
             <h2>发布前检查</h2>
             <ul class="check-list">
@@ -503,7 +597,11 @@ function saveOnboarding() {
           <span class="demo-badge">状态示例</span>
           <div class="review-stage-top">
             <div>
-              <span>{{ reviewWork ? `${reviewWork.title} · ${reviewWork.version}` : '求职材料模板包 · 候选版本 v1.3' }}</span>
+              <span>{{
+                reviewWork
+                  ? `${reviewWork.title} · ${reviewWork.version}`
+                  : '求职材料模板包 · 候选版本 v1.3'
+              }}</span>
               <h2>
                 {{
                   {

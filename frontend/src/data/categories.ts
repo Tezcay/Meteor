@@ -22,7 +22,10 @@ export const categories: DiscoveryCategoryOption[] = [
 ]
 
 // Platform-maintained vocabulary. Creators select from it; they do not invent new browse groups.
-export const categoryTaxonomy: Record<Exclude<DiscoveryCategory, 'all'>, DiscoverySubcategoryOption[]> = {
+export const categoryTaxonomy: Record<
+  Exclude<DiscoveryCategory, 'all'>,
+  DiscoverySubcategoryOption[]
+> = {
   design: [
     { value: 'layout', label: '版式与构成' },
     { value: 'identity', label: '品牌与标识' },
@@ -82,6 +85,9 @@ export function categoryLabel(value: DiscoveryCategory): string {
   return categoryOptions.find((item) => item.value === value)?.label ?? '全部'
 }
 
-export function subcategoryLabel(category: Exclude<DiscoveryCategory, 'all'>, value: string): string {
+export function subcategoryLabel(
+  category: Exclude<DiscoveryCategory, 'all'>,
+  value: string,
+): string {
   return categoryTaxonomy[category].find((item) => item.value === value)?.label ?? '其他'
 }
