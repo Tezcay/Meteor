@@ -39,7 +39,7 @@ flowchart LR
 
 | 范围 | 当前结论 | 已有证据 |
 | --- | --- | --- |
-| 商品目录 | 已完成只读列表、搜索与详情 | 公开 API、Mapper 测试、真实前端页面 |
+| 商品目录 | 已完成只读列表、搜索与详情 | 7 项 Service 测试、5 项公开 HTTP 契约测试、真实前端页面 |
 | 身份认证 | 已完成数据库账号、BCrypt、Session、CSRF | Web 测试、本机登录；注册／找回密码未做 |
 | 订单 | 已完成服务端核价、快照、用户级幂等与并发冲突恢复 | Service 单元测试、HTTP 契约测试、真实 MySQL 阶段验收 |
 | 支付 | 已完成默认关闭的本地测试适配器 | 10 项 Service 测试、7 项 Web 契约测试；不是真实支付 |
@@ -50,7 +50,7 @@ flowchart LR
 | 数据库集成测试 | 代码已接入，真实容器运行待完成 | 2 项被 Maven 发现；Docker 不可用时跳过 |
 | 可重复验证 | 本地一键门禁已完成，托管 CI 未做 | Maven Wrapper、前端格式／构建、链接和空白检查 |
 
-当前自动化结果是：后端 81 项被发现，79 项非容器测试执行通过，2 项 Testcontainers 因 Docker 不可用而跳过；前端 Prettier、TypeScript 和生产构建通过。`scripts/verify.ps1 -RequireContainers` 会把容器测试跳过判为失败，因此当前不能在简历中写“Testcontainers 已跑通”。
+当前自动化结果是：后端 86 项被发现，84 项非容器测试执行通过，2 项 Testcontainers 因 Docker 不可用而跳过；前端 Prettier、TypeScript 和生产构建通过。`scripts/verify.ps1 -RequireContainers` 会把容器测试跳过判为失败，因此当前不能在简历中写“Testcontainers 已跑通”。
 
 ## 七节学习主线
 
