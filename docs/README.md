@@ -50,7 +50,7 @@ flowchart LR
 | 数据库集成测试 | 代码已接入，真实容器运行待完成 | 2 项被 Maven 发现；Docker 不可用时跳过 |
 | 可重复验证 | 本地一键门禁已完成，托管 CI 未做 | Maven Wrapper、前端格式／构建、链接和空白检查 |
 
-当前自动化结果是：后端 55 项被发现，53 项执行通过，2 项 Testcontainers 因 Docker 不可用而跳过；前端 Prettier、TypeScript 和生产构建通过。`scripts/verify.ps1 -RequireContainers` 会把容器测试跳过判为失败，因此当前不能在简历中写“Testcontainers 已跑通”。
+当前自动化结果是：后端 56 项被发现，54 项非容器测试执行通过，2 项 Testcontainers 因 Docker 不可用而跳过；前端 Prettier、TypeScript 和生产构建通过。`scripts/verify.ps1 -RequireContainers` 会把容器测试跳过判为失败，因此当前不能在简历中写“Testcontainers 已跑通”。
 
 ## 七节学习主线
 
@@ -109,9 +109,10 @@ flowchart LR
 
 1. Docker Desktop 仍不可用，2 项 Testcontainers 测试没有取得 `Skipped: 0` 证据。
 2. 已有本地质量门禁，仍缺根据实际代码托管平台运行的 CI。
-3. `OrderMapper` 存在重复订单快照 SQL，字段变化时容易漏改。
-4. 支付尝试和事件状态仍以字符串表达；接入退款前应集中状态类型和重放逻辑。
-5. 下载使用 `readAllBytes()` 读取 Classpath 小文件；生产对象存储还需要流式传输或短时签名 URL、Range、限流和失败审计。
-6. 无障碍仍缺 NVDA／VoiceOver、Safari／Firefox、真机、200%／400% 缩放和强制颜色模式审计。
+3. 支付尝试和事件状态仍以字符串表达；接入退款前应集中状态类型和重放逻辑。
+4. 下载使用 `readAllBytes()` 读取 Classpath 小文件；生产对象存储还需要流式传输或短时签名 URL、Range、限流和失败审计。
+5. 无障碍仍缺 NVDA／VoiceOver、Safari／Firefox、真机、200%／400% 缩放和强制颜色模式审计。
+
+`OrderMapper` 的重复订单快照 SQL 已迁入 XML 公共片段，并由 `OrderMapperXmlTest` 检查 9 个映射语句、行锁差异和生成主键配置。
 
 业务承诺以 V0.4.0 和已接受 ADR 为准；实现证据以本页矩阵、学习执行日志和最新阶段审查报告为准。

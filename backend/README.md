@@ -110,7 +110,7 @@ E:\VibeCoding\Meteor\scripts\mysql\bootstrap-local.sql
 
 首次运行会从 Maven Central 下载该版本 Maven。`mvn-local.ps1` 只用于当前电脑上排查 IntelliJ Maven／JDK 路径问题，不是跨机器构建入口。
 
-原有 53 项测试覆盖商品查询、数据库账号加载、订单核价与幂等、测试支付事件与金额校验、权益发放、Release／Manifest 权限、下载票据签发与一次性消费、文件完整性，以及登录、CSRF、Session 和下载响应头的 Web 行为。
+现有 54 项非容器测试覆盖商品查询、数据库账号加载、订单核价与幂等、OrderMapper XML 映射契约、测试支付事件与金额校验、权益发放、Release／Manifest 权限、下载票据签发与一次性消费、文件完整性，以及登录、CSRF、Session 和下载响应头的 Web 行为。
 
 `PurchaseFlowMySqlIntegrationTest` 另外定义 2 项 Testcontainers 测试：临时 MySQL 从空库执行 Flyway V1～V12，再使用真实 MyBatis Mapper 验证下单／支付／权益幂等链，以及 Grant 插入失败时的事务回滚。Docker 可用时可单独执行：
 
@@ -118,7 +118,7 @@ E:\VibeCoding\Meteor\scripts\mysql\bootstrap-local.sql
 .\mvnw.cmd -Dtest=PurchaseFlowMySqlIntegrationTest test
 ```
 
-真正通过时报告必须为 `Tests run: 2, Skipped: 0`。2026-10-04 本机 Docker Desktop 因遗留 `dockerInference` socket 启动崩溃；当前全量报告是 55 项被发现、53 项通过、2 项跳过。测试代码已编译，不等于容器测试已验证。修复方法和逐行解释见[第七课](../docs/25-第七课-Testcontainers真实MySQL集成测试-V1.0.md)。
+真正通过时报告必须为 `Tests run: 2, Skipped: 0`。2026-10-04 本机 Docker Desktop 因遗留 `dockerInference` socket 启动崩溃；当前全量报告是 56 项被发现、54 项通过、2 项跳过。测试代码已编译，不等于容器测试已验证。修复方法和逐行解释见[第七课](../docs/25-第七课-Testcontainers真实MySQL集成测试-V1.0.md)。
 
 项目编译目标为 Java 21。仓库根目录的 `scripts/verify.ps1` 会统一执行 Wrapper 后端测试、前端格式与构建、文档链接和 Git 空白检查；Docker 可用后追加 `-RequireContainers`，如果这两项集成测试被跳过，命令会失败。
 

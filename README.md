@@ -46,7 +46,7 @@ Meteor 是一个面向数字作品交易与交付的全栈学习项目。当前�
 - 前端：Vue 3、TypeScript、Vite
 - 验证：JUnit 5、AssertJ、MockMvc、Testcontainers（待完成容器运行）、Playwright、axe-core、真实 MySQL HTTP 验收
 
-当前基线：Flyway V12；Maven 共发现 55 项后端测试，原有 53 项通过，新增 2 项 Testcontainers 测试因 Docker 不可用而跳过；前端类型检查与生产构建通过。11 个核心路由及本轮下载状态 axe WCAG A/AA 为 0 条违规。订单状态已经统一为 `PENDING_PAYMENT／PAID／CLOSED／REFUNDED`。
+当前基线：Flyway V12；Maven 共发现 56 项后端测试，54 项非容器测试通过，2 项 Testcontainers 测试因 Docker 不可用而跳过；前端类型检查与生产构建通过。11 个核心路由及本轮下载状态 axe WCAG A/AA 为 0 条违规。订单状态已经统一为 `PENDING_PAYMENT／PAID／CLOSED／REFUNDED`。
 
 ## 目录
 

@@ -21,7 +21,7 @@
 
 本课没有新增业务接口或数据库迁移。它为已经存在的下单、支付和权益代码增加自动化证据。
 
-## 1. 为什么现有 53 项测试还不够
+## 1. 为什么现有 54 项非容器测试还不够
 
 ### 1.1 Stub 单元测试证明了什么
 
@@ -435,8 +435,8 @@ Tests run: 2, Failures: 0, Errors: 0, Skipped: 2
 
 - Maven 成功解析 Spring Boot 4.1.0 管理的 Testcontainers 2.0.5；
 - 新测试使用 Java 21 目标成功编译；
-- 全仓 Maven 发现 55 项测试；
-- 原有 53 项全部通过；
+- 全仓 Maven 发现 56 项测试；
+- 54 项非容器测试全部通过，其中包括 OrderMapper XML 映射契约测试；
 - 新增 2 项因 Docker 环境不可用而跳过；
 - Docker Desktop 4.86.0 日志显示启动时无法访问遗留的 `dockerInference` socket，随后后端退出；
 - 尝试临时关闭 Docker AI 后仍触发同一错误，设置已经恢复；
@@ -462,7 +462,7 @@ Tests run: 2, Failures: 0, Errors: 0, Skipped: 2
 4. 检查仓库 Markdown 的相对链接；
 5. 执行 `git diff --check`，拦截本次差异中的空白错误。
 
-普通模式允许 Docker 不可用的电脑继续做其他开发，但会打印 `skipped=2` 警告。此时可以说明 53 项非容器测试通过，不能说明 Testcontainers 通过。
+普通模式允许 Docker 不可用的电脑继续做其他开发，但会打印 `skipped=2` 警告。此时可以说明 54 项非容器测试通过，不能说明 Testcontainers 通过。
 
 Docker 可用后运行严格模式：
 
@@ -500,7 +500,7 @@ Maven Wrapper 固定构建工具版本，Java 21 仍需由电脑或 CI 提供。
 
 答：
 
-> 还不能。本机 Docker Desktop 当前启动崩溃，Maven 报告 53 项通过、2 项容器测试跳过。测试代码已经编译并进入测试发现；必须在 Docker 可用环境得到 2 项执行、0 跳过后，才能把它列为已验证证据。
+> 还不能。本机 Docker Desktop 当前启动崩溃，Maven 报告 54 项非容器测试通过、2 项容器测试跳过。测试代码已经编译并进入测试发现；必须在 Docker 可用环境得到 2 项执行、0 跳过后，才能把它列为已验证证据。
 
 ### 下一步 CI 应做什么
 

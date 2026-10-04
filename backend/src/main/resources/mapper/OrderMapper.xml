@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+        PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="dev.meteor.order.mapper.OrderMapper">
+
+    <sql id="orderSnapshotColumns">
+        o.id,
+        o.user_id,
+        o.status,
+        o.total_amount_cents,
+        o.currency,
+        o.idempotency_key,
+        oi.product_id,
+        oi.package_id,
+        oi.product_title,
+        oi.shop_name,
+        oi.package_name,
+        oi.access_policy
+    </sql>
+
+    <sql id="orderSnapshotFrom">
+        FROM orders o
+        JOIN order_items oi ON oi.order_id = o.id
+    </sql>
+
+    <sql id="orderDetailColumns">
+        o.id,
+        o.status,
+        o.total_amount_cents,
+        o.currency,
+        o.created_at,
+        oi.product_id,
+        oi.package_id,
+        oi.product_title,
+        oi.shop_name,
+        oi.package_name,
+        oi.access_policy,
+        eg.id AS entitlement_grant_id,
+        eg.status AS entitlement_status,
+        eg.granted_at
+    </sql>
+
+    <sql id="orderDetailFrom">
+        FROM orders o
+        JOIN order_items oi ON oi.order_id = o.id
+        LEFT JOIN entitlement_grants eg ON eg.order_item_id = oi.id
+    </sql>
+
+    <select id="findByUserIdAndIdempotencyKey"
+            resultType="dev.meteor.order.mapper.projection.OrderSnapshotProjection">
+        SELECT <include refid="orderSnapshotColumns"/>
+        <include refid="orderSnapshotFrom"/>
+        WHERE o.user_id = #{userId}
+          AND o.idempotency_key = #{idempotencyKey}
+    </select>
+
+    <select id="findByUserIdAndIdempotencyKeyForUpdate"
+            resultType="dev.meteor.order.mapper.projection.OrderSnapshotProjection">
+        SELECT <include refid="orderSnapshotColumns"/>
+        <include refid="orderSnapshotFrom"/>
+        WHERE o.user_id = #{userId}
+          AND o.idempotency_key = #{idempotencyKey}
+        FOR UPDATE
+    </select>
+
+    <select id="findByIdAndUserId"
+            resultType="dev.meteor.order.mapper.projection.OrderSnapshotProjection">
+        SELECT <include refid="orderSnapshotColumns"/>
+        <include refid="orderSnapshotFrom"/>
+        WHERE o.id = #{orderId}
+          AND o.user_id = #{userId}
+    </select>
+
+    <select id="findByIdAndUserIdForUpdate"
+            resultType="dev.meteor.order.mapper.projection.OrderSnapshotProjection">
+        SELECT <include refid="orderSnapshotColumns"/>
+        <include refid="orderSnapshotFrom"/>
+        WHERE o.id = #{orderId}
+          AND o.user_id = #{userId}
+        FOR UPDATE
+    </select>
+
+    <select id="findAllByUserId"
+            resultType="dev.meteor.order.mapper.projection.OrderDetailProjection">
+        SELECT <include refid="orderDetailColumns"/>
+        <include refid="orderDetailFrom"/>
+        WHERE o.user_id = #{userId}
+        ORDER BY o.created_at DESC, o.id DESC
+    </select>
+
+    <select id="findDetailByIdAndUserId"
+            resultType="dev.meteor.order.mapper.projection.OrderDetailProjection">
+        SELECT <include refid="orderDetailColumns"/>
+        <include refid="orderDetailFrom"/>
+        WHERE o.id = #{orderId}
+          AND o.user_id = #{userId}
+    </select>
+
+    <insert id="insertOrder" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO orders (user_id, status, total_amount_cents, currency, idempotency_key)
+        VALUES (#{userId}, #{status}, #{totalAmountCents}, #{currency}, #{idempotencyKey})
+    </insert>
+
+    <insert id="insertOrderItem">
+        INSERT INTO order_items (
+            order_id,
+            product_id,
+            package_id,
+            product_title,
+            shop_name,
+            package_name,
+            access_policy,
+            unit_price_cents,
+            currency,
+            quantity
+        ) VALUES (
+            #{orderId},
+            #{productId},
+            #{packageId},
+            #{productTitle},
+            #{shopName},
+            #{packageName},
+            #{accessPolicy},
+            #{unitPriceCents},
+            #{currency},
+            #{quantity}
+        )
+    </insert>
+
+    <update id="markPaid">
+        UPDATE orders
+        SET status = 'PAID'
+        WHERE id = #{orderId}
+          AND user_id = #{userId}
+          AND status = 'PENDING_PAYMENT'
+    </update>
+</mapper>
