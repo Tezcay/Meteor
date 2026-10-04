@@ -1,4 +1,4 @@
-package dev.meteor.product.dto;
+package dev.meteor.web.error;
 
 import java.time.Instant;
 

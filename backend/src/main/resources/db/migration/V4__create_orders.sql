@@ -1,0 +1,40 @@
+CREATE TABLE orders (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    total_amount_cents BIGINT NOT NULL,
+    currency CHAR(3) NOT NULL,
+    idempotency_key VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    CONSTRAINT fk_order_user FOREIGN KEY (user_id) REFERENCES users (id),
+    CONSTRAINT uq_order_user_idempotency UNIQUE (user_id, idempotency_key),
+    CONSTRAINT chk_order_status CHECK (status IN ('PENDING', 'PAID', 'CANCELLED', 'REFUNDED')),
+    CONSTRAINT chk_order_total CHECK (total_amount_cents >= 0),
+    CONSTRAINT chk_order_currency CHECK (currency = 'CNY'),
+    INDEX idx_order_user_created (user_id, created_at, id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;
+
+CREATE TABLE order_items (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    order_id BIGINT NOT NULL,
+    product_id BIGINT NOT NULL,
+    package_id BIGINT NOT NULL,
+    product_title VARCHAR(160) NOT NULL,
+    package_name VARCHAR(80) NOT NULL,
+    unit_price_cents BIGINT NOT NULL,
+    currency CHAR(3) NOT NULL,
+    quantity INT NOT NULL DEFAULT 1,
+    created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    CONSTRAINT uq_order_item_order UNIQUE (order_id),
+    CONSTRAINT fk_order_item_order FOREIGN KEY (order_id) REFERENCES orders (id),
+    CONSTRAINT fk_order_item_product FOREIGN KEY (product_id) REFERENCES products (id),
+    CONSTRAINT fk_order_item_package FOREIGN KEY (package_id) REFERENCES packages (id),
+    CONSTRAINT chk_order_item_price CHECK (unit_price_cents >= 0),
+    CONSTRAINT chk_order_item_currency CHECK (currency = 'CNY'),
+    CONSTRAINT chk_order_item_quantity CHECK (quantity = 1),
+    INDEX idx_order_item_product (product_id),
+    INDEX idx_order_item_package (package_id)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;

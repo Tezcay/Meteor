@@ -107,6 +107,11 @@ class ProductQueryServiceTest {
         }
 
         @Override
+        public Optional<PackageOptionProjection> findSalePackage(long productId, long packageId) {
+            return packages.stream().filter(packageOption -> packageOption.id() == packageId).findFirst();
+        }
+
+        @Override
         public List<ProductSummaryProjection> findPublishedProducts(String searchPattern, String categorySlug) {
             lastSearchPattern = searchPattern;
             lastCategorySlug = categorySlug;

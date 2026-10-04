@@ -23,3 +23,9 @@ mybatis:
 
 server:
   port: ${METEOR_SERVER_PORT:8080}
+
+meteor:
+  demo-accounts:
+    enabled: ${METEOR_DEMO_ACCOUNTS_ENABLED:false}
+  test-payment:
+    enabled: ${METEOR_TEST_PAYMENT_ENABLED:false}

@@ -1,0 +1,42 @@
+CREATE TABLE payment_attempts (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    order_id BIGINT NOT NULL,
+    provider VARCHAR(40) NOT NULL,
+    provider_transaction_id VARCHAR(100) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+    amount_cents BIGINT NOT NULL,
+    currency CHAR(3) NOT NULL,
+    created_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    updated_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
+    PRIMARY KEY (id),
+    CONSTRAINT uq_payment_attempt_order UNIQUE (order_id),
+    CONSTRAINT uq_payment_attempt_transaction UNIQUE (provider, provider_transaction_id),
+    CONSTRAINT fk_payment_attempt_order FOREIGN KEY (order_id) REFERENCES orders (id),
+    CONSTRAINT chk_payment_attempt_status CHECK (status IN ('PENDING', 'SUCCEEDED', 'FAILED', 'RECONCILING')),
+    CONSTRAINT chk_payment_attempt_amount CHECK (amount_cents >= 0),
+    CONSTRAINT chk_payment_attempt_currency CHECK (currency = 'CNY'),
+    INDEX idx_payment_attempt_status (status, updated_at)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;
+
+CREATE TABLE payment_events (
+    id BIGINT NOT NULL AUTO_INCREMENT,
+    payment_attempt_id BIGINT NOT NULL,
+    provider VARCHAR(40) NOT NULL,
+    provider_event_id VARCHAR(100) NOT NULL,
+    provider_transaction_id VARCHAR(100) NOT NULL,
+    event_type VARCHAR(40) NOT NULL,
+    amount_cents BIGINT NOT NULL,
+    currency CHAR(3) NOT NULL,
+    processing_status VARCHAR(20) NOT NULL,
+    received_at TIMESTAMP(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    processed_at TIMESTAMP(6) NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT uq_payment_event_provider_id UNIQUE (provider, provider_event_id),
+    CONSTRAINT uq_payment_event_transaction UNIQUE (provider, provider_transaction_id),
+    CONSTRAINT fk_payment_event_attempt FOREIGN KEY (payment_attempt_id) REFERENCES payment_attempts (id),
+    CONSTRAINT chk_payment_event_type CHECK (event_type IN ('PAYMENT_SUCCEEDED')),
+    CONSTRAINT chk_payment_event_status CHECK (processing_status IN ('APPLIED', 'IGNORED', 'REJECTED')),
+    CONSTRAINT chk_payment_event_amount CHECK (amount_cents >= 0),
+    CONSTRAINT chk_payment_event_currency CHECK (currency = 'CNY'),
+    INDEX idx_payment_event_attempt (payment_attempt_id, received_at)
+) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_0900_ai_ci;

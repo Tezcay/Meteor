@@ -16,4 +16,9 @@ public interface ProductMapper {
     );
 
     List<PackageOptionProjection> findSalePackages(@Param("productId") long productId);
+
+    Optional<PackageOptionProjection> findSalePackage(
+            @Param("productId") long productId,
+            @Param("packageId") long packageId
+    );
 }

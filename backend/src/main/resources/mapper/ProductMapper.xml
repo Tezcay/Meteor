@@ -59,4 +59,15 @@
           AND sale_status = 'ON_SALE'
         ORDER BY display_order, id
     </select>
+
+    <select id="findSalePackage" resultType="dev.meteor.product.mapper.projection.PackageOptionProjection">
+        SELECT id,
+               name,
+               price_cents,
+               currency
+        FROM packages
+        WHERE id = #{packageId}
+          AND product_id = #{productId}
+          AND sale_status = 'ON_SALE'
+    </select>
 </mapper>

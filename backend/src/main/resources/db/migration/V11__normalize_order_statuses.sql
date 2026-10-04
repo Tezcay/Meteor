@@ -1,0 +1,15 @@
+ALTER TABLE orders
+    DROP CHECK chk_order_status;
+
+UPDATE orders
+SET status = CASE status
+    WHEN 'PENDING' THEN 'PENDING_PAYMENT'
+    WHEN 'CANCELLED' THEN 'CLOSED'
+    ELSE status
+END
+WHERE status IN ('PENDING', 'CANCELLED');
+
+ALTER TABLE orders
+    ALTER COLUMN status SET DEFAULT 'PENDING_PAYMENT',
+    ADD CONSTRAINT chk_order_status
+        CHECK (status IN ('PENDING_PAYMENT', 'PAID', 'CLOSED', 'REFUNDED'));
