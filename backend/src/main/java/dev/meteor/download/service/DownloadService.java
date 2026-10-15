@@ -28,6 +28,7 @@ import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/** 签发短时一次性票据；消费时重新授权，并在同一事务内消费票据、记录响应准备审计。 */
 @Service
 public class DownloadService {
 
@@ -62,6 +63,7 @@ public class DownloadService {
         String token = generateToken();
         Instant issuedAt = clock.instant();
         Instant expiresAt = issuedAt.plus(TICKET_LIFETIME);
+        // 原始随机 token 只交给客户端，数据库仅存 SHA-256；数据库哈希不能直接当下载凭证。
         DownloadTicketInsert ticket = new DownloadTicketInsert(
                 sha256(token.getBytes(StandardCharsets.UTF_8)),
                 userId,
@@ -92,16 +94,19 @@ public class DownloadService {
             throw new DownloadNotFoundException();
         }
 
-        Instant now = clock.instant();
+        // 按 token 哈希和当前用户锁住票据，同一票据的并发消费在数据库处排队。
         DownloadTicketProjection ticket = downloadMapper
                 .findTicketForUpdate(sha256(token.getBytes(StandardCharsets.UTF_8)), userId)
                 .orElseThrow(DownloadNotFoundException::new);
+        // 等待行锁期间可能到期，必须取得锁后再取时间；恰好到期也不能消费。
+        Instant now = clock.instant();
         if (ticket.status() != DownloadTicketStatus.ISSUED
                 || ticket.consumedAt() != null
                 || !ticket.expiresAt().isAfter(now)) {
             throw new DownloadNotFoundException();
         }
 
+        // 签发后的撤权、版本禁用或文件关联变化必须立即生效，不能仅信任票据里的 ID。
         DownloadableFileProjection file = findAccessibleFile(
                 userId,
                 ticket.grantId(),
@@ -112,10 +117,12 @@ public class DownloadService {
             throw new DownloadNotFoundException();
         }
 
+        // 先确认文件可读且摘要正确，再消费；文件错误不会烧掉票据。
         Resource resource = verifyClasspathResource(file);
         if (downloadMapper.markTicketConsumed(ticket.id(), userId, now) != 1) {
             throw new DownloadNotFoundException();
         }
+        // 审计失败也回滚票据消费。PREPARED 仅代表服务端准备响应，不证明浏览器已保存。
         int insertedAudits = downloadMapper.insertAudit(new DownloadAuditInsert(
                 ticket.id(),
                 userId,
@@ -161,6 +168,7 @@ public class DownloadService {
         try (InputStream source = resource.getInputStream()) {
             MessageDigest digest = sha256Digest();
             long sizeBytes;
+            // 分块计算摘要和字节数，避免整文件进堆；Controller 随后会再次读取 Resource 写响应。
             try (DigestInputStream input = new DigestInputStream(source, digest)) {
                 sizeBytes = input.transferTo(OutputStream.nullOutputStream());
             }

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="dev.meteor.product.mapper.ProductPublicationMapper">
+    <!-- 当前切片只发布新商品的第一个修订，锁住商品、修订与自己的有效店铺。 -->
+    <select id="findOwnedRevisionForUpdate" resultType="dev.meteor.product.mapper.projection.OwnedProductRevisionProjection">
+        SELECT p.id AS productId, pr.id AS revisionId,
+               p.current_published_revision_id AS publishedRevisionId,
+               pr.status AS revisionStatus, p.sale_status AS saleStatus, pr.summary
+        FROM products p JOIN shops s ON s.id = p.shop_id
+        JOIN product_revisions pr ON pr.product_id = p.id AND pr.revision_number = 1
+        WHERE p.id = #{productId} AND s.owner_user_id = #{userId} AND s.status = 'ACTIVE'
+        FOR UPDATE
+    </select>
+    <select id="findOwnProducts" resultType="dev.meteor.product.dto.ProductDraftResponse">
+        SELECT p.id AS productId, pr.id AS revisionId, pr.title, pr.summary,
+               pr.status AS revisionStatus, p.sale_status AS saleStatus, pr.created_at AS createdAt
+        FROM products p JOIN shops s ON s.id = p.shop_id
+        JOIN product_revisions pr ON pr.product_id = p.id AND pr.revision_number = 1
+        WHERE s.owner_user_id = #{userId}
+        ORDER BY pr.created_at DESC, pr.id DESC LIMIT 50
+    </select>
+    <sql id="reusableFileFrom">
+        FROM file_objects fo JOIN manifest_items mi ON mi.file_object_id = fo.id
+        JOIN delivery_manifests dm ON dm.id = mi.manifest_id
+        JOIN releases r ON r.id = dm.release_id
+        JOIN packages pkg ON pkg.id = r.package_id
+        JOIN products p ON p.id = pkg.product_id JOIN shops s ON s.id = p.shop_id
+        WHERE s.owner_user_id = #{userId} AND s.status = 'ACTIVE'
+          AND r.status = 'PUBLISHED' AND fo.storage_provider = 'CLASSPATH'
+    </sql>
+    <select id="findReusableFiles" resultType="dev.meteor.product.mapper.projection.ReusableDeliveryFileProjection">
+        SELECT DISTINCT fo.id, fo.original_filename AS filename, fo.media_type AS mediaType,
+               fo.size_bytes AS sizeBytes, fo.storage_key AS storageKey, fo.content_sha256 AS contentSha256
+        <include refid="reusableFileFrom"/>
+        ORDER BY fo.id LIMIT 50
+    </select>
+    <select id="findReusableFileForUpdate" resultType="dev.meteor.product.mapper.projection.ReusableDeliveryFileProjection">
+        SELECT fo.id, fo.original_filename AS filename, fo.media_type AS mediaType,
+               fo.size_bytes AS sizeBytes, fo.storage_key AS storageKey, fo.content_sha256 AS contentSha256
+        <include refid="reusableFileFrom"/>
+          AND fo.id = #{fileObjectId}
+        ORDER BY mi.id LIMIT 1 FOR UPDATE
+    </select>
+    <select id="findPublication" resultType="dev.meteor.product.dto.ProductPublicationResponse">
+        SELECT p.id AS productId, pr.id AS revisionId, pkg.id AS packageId,
+               r.id AS releaseId, dm.id AS manifestId, mi.id AS manifestItemId,
+               pkg.name AS packageName, pkg.price_cents AS priceCents, pkg.currency,
+               mi.file_object_id AS fileObjectId
+        FROM products p JOIN shops s ON s.id = p.shop_id
+        JOIN product_revisions pr ON pr.id = p.current_published_revision_id AND pr.product_id = p.id
+        JOIN packages pkg ON pkg.product_id = p.id
+        JOIN releases r ON r.package_id = pkg.id
+        JOIN delivery_manifests dm ON dm.release_id = r.id
+        JOIN manifest_items mi ON mi.manifest_id = dm.id
+        WHERE p.id = #{productId} AND s.owner_user_id = #{userId}
+          AND p.sale_status = 'ON_SALE' AND pr.status = 'PUBLISHED'
+          AND pkg.sale_status = 'ON_SALE' AND r.status = 'PUBLISHED'
+        ORDER BY pkg.id, r.id, mi.id LIMIT 1
+    </select>
+    <insert id="insertPackage" useGeneratedKeys="true" keyProperty="packageId" keyColumn="id">
+        INSERT INTO packages (product_id, name, price_cents, currency, sale_status, display_order)
+        VALUES (#{productId}, #{packageName}, #{priceCents}, 'CNY', 'ON_SALE', 1)
+    </insert>
+    <insert id="insertRelease" useGeneratedKeys="true" keyProperty="releaseId" keyColumn="id">
+        INSERT INTO releases (package_id, release_number, version_label, summary, status, published_at)
+        VALUES (#{packageId}, 1, '1.0.0', #{summary}, 'PUBLISHED', CURRENT_TIMESTAMP(6))
+    </insert>
+    <insert id="insertManifest" useGeneratedKeys="true" keyProperty="manifestId" keyColumn="id">
+        INSERT INTO delivery_manifests (release_id) VALUES (#{releaseId})
+    </insert>
+    <insert id="insertManifestItem" useGeneratedKeys="true" keyProperty="manifestItemId" keyColumn="id">
+        INSERT INTO manifest_items (manifest_id, file_object_id, item_position, role, display_name)
+        VALUES (#{manifestId}, #{fileObjectId}, 1, 'PRIMARY', #{filename})
+    </insert>
+    <update id="markRevisionPublished">
+        UPDATE product_revisions SET status = 'PUBLISHED', published_at = CURRENT_TIMESTAMP(6)
+        WHERE id = #{revisionId} AND product_id = #{productId}
+          AND created_by_user_id = #{userId} AND status = 'DRAFT'
+    </update>
+    <update id="markProductOnSale">
+        UPDATE products SET sale_status = 'ON_SALE', current_published_revision_id = #{revisionId}
+        WHERE id = #{productId} AND sale_status = 'OFF_SALE' AND current_published_revision_id IS NULL
+    </update>
+</mapper>

@@ -1,6 +1,11 @@
-# Meteor Backend：公开商品读取与会话认证
+# Meteor Backend：商品发布、交易与受控交付
 
-当前实现公开商品读取、Spring Security Session 登录，以及“服务端核价下单 → 本地测试支付 → 购买权益 → 内容库／订单 → Package 发布版本 → 冻结交付清单 → 一次性受控下载”闭环。数据库由 Flyway 管理到 V12。下载最小切片会流式校验 Classpath 文件并以 Spring `Resource` 写响应，不会把整份文件放进 JVM 堆内存；它仍不等同于生产对象存储、Range／断点续传或真实支付。
+## 2026-10-15：素材商品验收
+
+当前 Flyway 为 V13，新增四组已有图片的商品／分类／ZIP 元数据；不新增表。后端全量 125 项通过、0 跳过，其中 5 项真实 MySQL 测试覆盖四个素材包的交易、越权隐藏、实际文件摘要和重复消费。详见[素材接入说明](../docs/31-已有展示素材接入真实商品.md)。
+
+
+当前实现公开商品读取、Spring Security Session 登录，以及“服务端核价下单 → 本地测试支付 → 购买权益 → 内容库／订单 → Package 发布版本 → 冻结交付清单 → 一次性受控下载”闭环。数据库由 Flyway 管理到 V13。下载最小切片会流式校验 Classpath 文件并以 Spring `Resource` 写响应，不会把整份文件放进 JVM 堆内存；它仍不等同于生产对象存储、Range／断点续传或真实支付。
 
 ## 代码地图
 
@@ -48,7 +53,7 @@ Vue 前端 frontend/（Vite 开发服务器）
   → DownloadService 重新校验当前用户、ACTIVE Grant、PUBLISHED Release 和条目归属
   → download_tickets 保存五分钟一次性 token 的 SHA-256，不保存原 token
   → GET /api/downloads/{token}
-  → 再次校验权益并流式核对文件大小与 SHA-256，随后锁定并消费票据
+  → 锁定票据后取当前时间，再次校验权益与文件，随后消费票据
   → Spring Resource 分块写入文件响应
   → download_audits 记录 FILE_RESPONSE_PREPARED
 ```
@@ -59,7 +64,7 @@ Vue 前端 frontend/（Vite 开发服务器）
 
 1. `ProductController.java`：HTTP 请求从哪里进入。
 2. `ProductQueryService.java`：参数检查、未找到处理和查询结果到 API DTO 的转换。
-3. `ProductMapper.xml`：真正执行的两条 SQL。
+3. `ProductMapper.xml`：公开目录、详情与可售套餐 SQL。
 4. `db/migration/`：按版本演进的表结构、数据迁移、约束与索引。
 5. `../frontend/src/api/products.ts`：前端如何调用接口并处理失败。
 
@@ -87,11 +92,21 @@ V3 迁移保留两个本地演示账号，密码均为 `password`；认证默认
 
 ## 数据库迁移
 
-数据库结构由 Flyway 管理到 V12。V6 创建购买权益，V7 回填历史已支付订单，V8 默认锁定固定演示凭据，V9 创建 Package 级 Release，V10 创建不可变交付清单与文件对象元数据，V11 统一订单状态，V12 创建一次性下载票据与响应准备审计。应用启动时仅在显式开启本地开关后恢复演示密码，否则会再次锁定。已经应用的迁移文件不得修改；后续变化必须新增更高版本迁移。
+数据库结构由 Flyway 管理到 V13。V6 创建购买权益，V7 回填历史已支付订单，V8 默认锁定固定演示凭据，V9 创建 Package 级 Release，V10 创建不可变交付清单与文件对象元数据，V11 统一订单状态，V12 创建一次性下载票据与响应准备审计，V13 预置四个已有图片 ZIP 商品、分类与交付元数据。应用启动时仅在显式开启本地开关后恢复演示密码，否则会再次锁定。已经应用的迁移文件不得修改；后续变化必须新增更高版本迁移。
 
 为了接管早期没有 Flyway 历史表的本地 `meteor` 数据库，当前开发配置启用 `baseline-on-migrate` 并将基线版本设为 1。部署到全新或正式环境时应显式设置 `METEOR_FLYWAY_BASELINE_ON_MIGRATE=false`，避免错误接管未知数据库。
 
-## 本地建库
+## 创作者草稿与最小首次发布（2026-10-14）
+
+- POST `/api/creator/product-drafts` 保存自己的草稿；GET 同一路径保留旧草稿列表。
+- GET `/api/creator/products` 读取自有草稿与已发布作品；GET `/api/creator/delivery-assets` 读取可复用素材展示信息。
+- POST `/api/creator/product-drafts/{productId}/publish` 配置一个付费套餐，校验素材来源与完整性，事务内创建版本／清单，再上架。
+- CREATOR、Session、CSRF 与服务端资源归属检查都保留；同参数发布重放返回原结果，不同配置返回 409。
+- 使用 V2／V9／V10 现有表；当前迁移为 V13；没有上传、审核、编辑或入驻接口。页面真实入口为 `/creator/works`。
+
+阅读 [发布专题](../docs/28-创作者商品草稿与发布任务-V1.0.md)；当前门禁与清理记录见 [执行日志](../docs/08-学习执行日志.md)。
+
+## 本地建库说明
 
 MySQL root 密码只在本机输入，不要发到对话中。可以在 MySQL Workbench 打开并执行：
 
@@ -111,17 +126,17 @@ E:\VibeCoding\Meteor\scripts\mysql\bootstrap-local.sql
 
 首次运行会从 Maven Central 下载该版本 Maven。`mvn-local.ps1` 只用于当前电脑上排查 IntelliJ Maven／JDK 路径问题，不是跨机器构建入口。
 
-现有 93 项非容器测试覆盖公开商品列表／详情的 HTTP 契约、数据库账号加载、订单核价与幂等、统一错误 JSON、请求编号校验／MDC 清理／下载 token 日志遮蔽、订单 HTTP 认证／CSRF／校验／错误契约、OrderMapper XML 映射契约、测试支付事件、状态转移、金额校验与 HTTP 开关／认证／CSRF 契约、权益发放、内容库／Release／Manifest 的当前用户与资源隐藏契约、下载票据签发与一次性消费、文件完整性、存储失败，以及登录、Session、附件文件名和媒体类型的 Web 行为。
+现有 120 项非容器测试覆盖公开商品列表／详情的 HTTP 契约、数据库账号加载、订单核价与幂等、统一错误 JSON、请求编号校验／MDC 清理／下载 token 日志遮蔽、订单 HTTP 认证／CSRF／校验／错误契约、OrderMapper XML 映射契约、测试支付事件、状态转移、金额校验与 HTTP 开关／认证／CSRF 契约、权益发放、内容库／Release／Manifest 的当前用户与资源隐藏契约、下载票据签发与一次性消费、文件完整性、存储失败，以及登录、Session、附件文件名和媒体类型的 Web 行为。
 
-`PurchaseFlowMySqlIntegrationTest` 另外定义 2 项 Testcontainers 测试：临时 MySQL 从空库执行 Flyway V1～V12，再使用真实 MyBatis Mapper 验证顺序重放、同键双线程下单、支付／权益／一次性下载链，以及 Grant 或 DownloadAudit 插入失败时的事务回滚。下载审计失败后还会使用同一 token 重试，证明票据更新已回滚。Docker 可用时可单独执行：
+`PurchaseFlowMySqlIntegrationTest` 定义 5 项 Testcontainers 测试：临时 MySQL 从空库执行 Flyway V1～V13，再使用真实 MyBatis Mapper 验证顺序重放、同键双线程下单、支付／权益／一次性下载链，以及 Grant 或 DownloadAudit 插入失败时的事务回滚。下载审计失败后还会使用同一 token 重试，证明票据更新已回滚。Docker 可用时可单独执行：
 
 ```powershell
 .\mvnw.cmd -Dtest=PurchaseFlowMySqlIntegrationTest test
 ```
 
-真正通过时报告必须为 `Tests run: 2, Skipped: 0`。2026-10-05 本机已实际运行临时 MySQL 8.0.36：容器测试 `2/2` 通过、0 跳过，全量后端 `95/95` 通过；同键双线程场景连续运行 3 轮均通过。测试专用容器允许创建扩大竞争窗口和故障注入的 Trigger，生产应用配置不启用该选项。该场景不是压力测试，Docker 修复、真实故障和逐行解释见[第七课](../docs/25-第七课-Testcontainers真实MySQL集成测试-V1.0.md)。
+当前真正通过时报告必须为 `Tests run: 5, Skipped: 0`；新增四包 ZIP 内容核对，并覆盖商家首次发布、发布重放／竞争、新商品购买下载与发布事务回滚。2026-10-05 本机已实际运行临时 MySQL 8.0.36：容器测试 `2/2` 通过、0 跳过，全量后端 `95/95` 通过；同键双线程场景连续运行 3 轮均通过。测试专用容器允许创建扩大竞争窗口和故障注入的 Trigger，生产应用配置不启用该选项。该场景不是压力测试，Docker 修复、真实故障和逐行解释见[第七课](../docs/25-第七课-Testcontainers真实MySQL集成测试-V1.0.md)。
 
-项目编译目标为 Java 21。仓库根目录的 `scripts/verify.ps1` 会统一执行 Wrapper 后端测试、前端格式与构建、文档链接和 Git 空白检查；形成简历或交付证据时追加 `-RequireContainers`，如果这两项集成测试被跳过，命令会失败。
+项目编译目标为 Java 21。仓库根目录的 `scripts/verify.ps1` 会统一执行 Wrapper 后端测试、前端格式与构建、文档链接和 Git 空白检查；形成简历或交付证据时追加 `-RequireContainers`，如果五项集成测试中的任一项被跳过，命令会失败。
 
 ## 启动
 

@@ -11,6 +11,9 @@ import dev.meteor.order.service.OrderPackageNotFoundException;
 import dev.meteor.payment.service.PaymentConflictException;
 import dev.meteor.payment.service.PaymentOrderNotFoundException;
 import dev.meteor.product.service.ProductNotFoundException;
+import dev.meteor.product.service.CreatorShopUnavailableException;
+import dev.meteor.product.service.ProductDraftNotFoundException;
+import dev.meteor.product.service.ProductPublicationConflictException;
 import dev.meteor.web.request.RequestCorrelationFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
@@ -25,6 +28,29 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(ProductDraftNotFoundException.class)
+    @ResponseStatus(HttpStatus.NOT_FOUND)
+    public ApiErrorResponse handleProductDraftNotFound(
+            ProductDraftNotFoundException exception, HttpServletRequest request) {
+        return error(request, "PRODUCT_DRAFT_NOT_FOUND", exception.getMessage());
+    }
+
+    @ExceptionHandler(ProductPublicationConflictException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ApiErrorResponse handleProductPublicationConflict(
+            ProductPublicationConflictException exception, HttpServletRequest request) {
+        return error(request, "PRODUCT_PUBLICATION_CONFLICT", exception.getMessage());
+    }
+
+    @ExceptionHandler(CreatorShopUnavailableException.class)
+    @ResponseStatus(HttpStatus.CONFLICT)
+    public ApiErrorResponse handleCreatorShopUnavailable(
+            CreatorShopUnavailableException exception,
+            HttpServletRequest request
+    ) {
+        return error(request, "CREATOR_SHOP_UNAVAILABLE", exception.getMessage());
+    }
 
     @ExceptionHandler(ProductNotFoundException.class)
     @ResponseStatus(HttpStatus.NOT_FOUND)

@@ -10,6 +10,7 @@ import org.apache.ibatis.annotations.Select;
 
 public interface EntitlementMapper {
 
+    // 订单项唯一约束防止重复 Grant；重复时只原样保留 id，不重置 REVOKED 状态。
     @Insert("""
             INSERT INTO entitlement_grants (
                 user_id,

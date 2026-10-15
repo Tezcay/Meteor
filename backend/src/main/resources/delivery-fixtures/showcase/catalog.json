@@ -1,0 +1,55 @@
+[
+  {
+    "id": 9101,
+    "slug": "light-and-space",
+    "title": "光与空间",
+    "category": "photography",
+    "priceCents": 1900,
+    "images": [
+      "courtyard-1280.webp",
+      "exhibition-1942.webp",
+      "creator-studio-1280.webp"
+    ],
+    "sizeBytes": 352288,
+    "sha256": "2419ab368fd30c87a05ed3c97959d0316543f31af415fe3245e0e46f90fd66c1"
+  },
+  {
+    "id": 9102,
+    "slug": "winter-stillness",
+    "title": "冬日静谧",
+    "category": "illustration",
+    "priceCents": 2900,
+    "images": [
+      "posters/winter-forest.webp",
+      "posters/tahoe-overlook.webp",
+      "posters/winter-cabin.webp"
+    ],
+    "sizeBytes": 499632,
+    "sha256": "818e7379a3877fecd3264c3312921e6fca86ab6772b213c8d39df4e5ea63337f"
+  },
+  {
+    "id": 9103,
+    "slug": "quiet-architecture",
+    "title": "静谧建筑",
+    "category": "illustration",
+    "priceCents": 1900,
+    "images": [
+      "posters/still-places.webp"
+    ],
+    "sizeBytes": 112142,
+    "sha256": "3b3e257cad7bf52efa4da9de534cd8b27652722e3c02fb118344eed84950f120"
+  },
+  {
+    "id": 9104,
+    "slug": "landscape-narrative",
+    "title": "风景叙事",
+    "category": "illustration",
+    "priceCents": 2900,
+    "images": [
+      "posters/sunset-field.webp",
+      "posters/wild-places.webp"
+    ],
+    "sizeBytes": 496336,
+    "sha256": "17292a861572719e5c94ef9e8ce5f59beb1afa436ce0489a877b85158aaf975d"
+  }
+]

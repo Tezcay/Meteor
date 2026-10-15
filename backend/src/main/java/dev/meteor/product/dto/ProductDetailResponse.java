@@ -7,7 +7,7 @@ public record ProductDetailResponse(
         String shopName,
         String title,
         String summary,
-        List<PackageOptionResponse> packages
+        List<PackageOptionResponse> packages  // 可售套餐列表
 ) {
     public ProductDetailResponse {
         packages = List.copyOf(packages);

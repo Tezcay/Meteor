@@ -55,6 +55,7 @@
           AND o.idempotency_key = #{idempotencyKey}
     </select>
 
+    <!-- 唯一键竞争后的当前读：读取胜出事务已提交的数据，不沿用首次查询的旧快照。 -->
     <select id="findByUserIdAndIdempotencyKeyForUpdate"
             resultType="dev.meteor.order.mapper.projection.OrderSnapshotProjection">
         SELECT <include refid="orderSnapshotColumns"/>
@@ -128,6 +129,7 @@
         )
     </insert>
 
+    <!-- 归属与旧状态均限定；Service 校验影响一行，阻止非法状态跳转。 -->
     <update id="markPaid">
         UPDATE orders
         SET status = 'PAID'

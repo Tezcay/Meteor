@@ -74,7 +74,6 @@ const loginError = ref('')
 const activeImageIndex = ref(0)
 const localRating = ref(0)
 const ratingNotice = ref('')
-const collectionSaved = ref(false)
 const collectionViewer = ref<HTMLDialogElement | null>(null)
 
 function selectLoginRole(role: Exclude<LocalRole, 'visitor'>) {
@@ -126,6 +125,11 @@ const requestedProductId = computed(() =>
 const displayProduct = computed(() => product.value ?? seededProduct)
 const canShowProduct = computed(() => product.value !== null || requestedProductId.value === 1001)
 const productSummary = computed(() => displayProduct.value.summary.replace(/[。！？]+$/, ''))
+const productArtwork = computed(() =>
+  product.value
+    ? artworkCollections.find((item) => item.productId === product.value!.id)
+    : undefined,
+)
 type ProductPreview = {
   label: string
   eyebrow: string
@@ -215,7 +219,7 @@ const selectedPackagePresentation = computed(() => {
     }
   }
   return {
-    items: ['作品文件与使用说明', '购买后可在内容库查看', '授权范围以正式发布信息为准'],
+    items: ['已发布版本的交付文件', '购买后可在内容库查看', '具体文件以正式清单为准'],
     note: '具体内容以作品发布信息为准',
   }
 })
@@ -240,6 +244,8 @@ const featuredCollections = computed(() =>
 const catalogWorks = computed(() => {
   const keyword = query.value.trim().toLocaleLowerCase()
   const items = showcaseItems.filter((work) => {
+    // Formal listings come from the API. Hide placeholder cards and avoid duplicate imported products.
+    if (work.art === 'demo' || collectionSlugFor(work)) return false
     if (category.value !== 'all' && work.category !== category.value) return false
     if (topic.value && work.topic !== topic.value) return false
     if (!keyword) return true
@@ -262,7 +268,11 @@ const hasMoreCatalogWorks = computed(
   () => visibleCatalogWorks.value.length < catalogWorks.value.length,
 )
 const loadedCatalogProducts = computed(() =>
-  category.value === 'all' || category.value === 'templates' ? catalog.value : [],
+  topic.value
+    ? catalog.value.filter((item) =>
+        artworkCollections.some((work) => work.productId === item.id && work.slug === topic.value),
+      )
+    : catalog.value,
 )
 watch(
   () => route.query.next,
@@ -356,7 +366,6 @@ watch(
     topic.value = String(route.query.topic ?? '')
     selectedPackage.value = Number(route.query.package ?? 2001)
     activeImageIndex.value = 0
-    collectionSaved.value = false
     product.value = null
     productError.value = false
     if (props.path === '/discover') void loadCatalog()
@@ -646,7 +655,6 @@ async function signInWithDemoRole() {
               <select v-model="catalogSort" aria-label="作品排序">
                 <option value="featured">编辑精选</option>
                 <option value="newest">最新加入</option>
-                <option value="rating">评分优先</option>
               </select>
             </label>
           </div>
@@ -694,10 +702,25 @@ async function signInWithDemoRole() {
               class="catalog-work"
               :href="`/products/${item.id}`"
             >
-              <div class="catalog-work-art catalog-api-piece">
-                <span>{{ item.shopName }}</span>
-                <strong>{{ item.title }}</strong>
-                <small>已发布作品</small>
+              <div
+                class="catalog-work-art catalog-api-piece"
+                :class="{
+                  'has-image': artworkCollections.some((work) => work.productId === item.id),
+                }"
+              >
+                <img
+                  v-if="artworkCollections.find((work) => work.productId === item.id)"
+                  :src="
+                    artworkCollections.find((work) => work.productId === item.id)!.images[0]!.src
+                  "
+                  :alt="item.title + '预览'"
+                  loading="lazy"
+                />
+                <template v-else>
+                  <span>{{ item.shopName }}</span>
+                  <strong>{{ item.title }}</strong>
+                  <small>已发布作品</small>
+                </template>
               </div>
               <div class="catalog-work-copy">
                 <span>数字作品</span>
@@ -810,14 +833,8 @@ async function signInWithDemoRole() {
               <button type="button" aria-label="下一张图像" @click="openCollectionViewer">→</button>
             </div>
           </div>
-          <button
-            class="collection-save"
-            type="button"
-            :aria-pressed="collectionSaved"
-            @click="collectionSaved = !collectionSaved"
-          >
-            {{ collectionSaved ? '已收藏' : '收藏作品' }}
-          </button>
+          <a class="collection-save" :href="`/products/${collection.productId}`">查看套餐与购买</a>
+          <p class="field-note">演示图集；价格与可售状态以商品接口为准</p>
           <p class="collection-summary">{{ collection.summary }}</p>
           <a class="underlined-link" href="#collection-images">浏览全部图像</a>
         </aside>
@@ -825,7 +842,8 @@ async function signInWithDemoRole() {
       <section id="collection-note" class="page-width collection-note">
         <h2>作品说明</h2>
         <p>
-          这是一组手动编排的展示图像。作品集归属由创作者或编辑配置，不依据题材或视觉相似度自动合并。
+          图集已配置对应商品入口。交付包包含现有 WebP 图片与素材说明，不含 PSD
+          等源文件或新增商用授权；摄影分类场景为项目生成的演示图。购买与下载以服务端商品状态及权益为准。
         </p>
       </section>
       <section
@@ -919,7 +937,13 @@ async function signInWithDemoRole() {
         </div>
         <section class="page-width product-layout">
           <div class="product-gallery">
-            <div class="product-cover" :class="'product-cover-variant-' + activeImageIndex">
+            <img
+              v-if="productArtwork"
+              :src="productArtwork.images[0]!.src"
+              :alt="productArtwork.images[0]!.alt"
+              style="width: 100%; height: auto; display: block"
+            />
+            <div v-else class="product-cover" :class="'product-cover-variant-' + activeImageIndex">
               <span>{{ activeProductPreview.eyebrow }}</span>
               <strong
                 >{{ activeProductPreview.title }}<br /><i>{{
@@ -929,7 +953,13 @@ async function signInWithDemoRole() {
               <div class="product-cover-rule"></div>
               <small>{{ activeProductPreview.footer }}</small>
             </div>
-            <div class="product-thumbs" aria-label="作品预览切换">
+            <a
+              v-if="productArtwork"
+              class="underlined-link"
+              :href="`/collections/${productArtwork.slug}`"
+              >浏览全部 {{ productArtwork.images.length }} 张预览图</a
+            >
+            <div v-else class="product-thumbs" aria-label="作品预览切换">
               <button
                 v-for="(preview, index) in productPreviewOptions"
                 :key="preview.label"
@@ -951,7 +981,9 @@ async function signInWithDemoRole() {
             >
             <h1>{{ displayProduct.title }}</h1>
             <p class="product-summary">{{ productSummary }}</p>
-            <section class="product-rating" aria-label="作品评分">
+            <!-- 真实 API 商品没有评价数据，示例评分只允许出现在明确的设计预览中。 -->
+            <section v-if="isDemoProduct" class="product-rating" aria-label="演示评分">
+              <p class="field-note">设计预览评分，尚未接通评价服务</p>
               <div class="product-rating-summary">
                 <span class="rating-stars" aria-hidden="true">★★★★★</span>
                 <strong>{{ productRating.score }}</strong>

@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="dev.meteor.product.mapper.ProductDraftMapper">
+    <!-- 从当前用户寻找自己的有效店铺，并锁住店铺行，避免创建过程中店铺被暂停。 -->
+    <select id="findActiveShopForUpdate" resultType="java.lang.Long">
+        SELECT id FROM shops
+        WHERE owner_user_id = #{userId} AND status = 'ACTIVE'
+        FOR UPDATE
+    </select>
+
+    <!-- 保存商品身份，不上架、不指向已发布修订。自增主键回填 productId。 -->
+    <insert id="insertProduct" useGeneratedKeys="true" keyProperty="productId" keyColumn="id">
+        INSERT INTO products (shop_id, sale_status, current_published_revision_id)
+        VALUES (#{shopId}, 'OFF_SALE', NULL)
+    </insert>
+
+    <!-- 标题和简介属于修订。当前接口只创建新商品的第 1 个修订，不编辑已有商品。 -->
+    <insert id="insertRevision" useGeneratedKeys="true" keyProperty="revisionId" keyColumn="id">
+        INSERT INTO product_revisions
+            (product_id, revision_number, title, summary, status, created_by_user_id)
+        VALUES (#{productId}, 1, #{title}, #{summary}, 'DRAFT', #{userId})
+    </insert>
+
+    <sql id="draftColumns">
+        p.id AS productId, pr.id AS revisionId, pr.title, pr.summary,
+        pr.status AS revisionStatus, p.sale_status AS saleStatus, pr.created_at AS createdAt
+    </sql>
+
+    <select id="findOwnedDraft" resultType="dev.meteor.product.dto.ProductDraftResponse">
+        SELECT <include refid="draftColumns"/>
+        FROM products p
+        JOIN shops s ON s.id = p.shop_id
+        JOIN product_revisions pr ON pr.product_id = p.id
+        WHERE s.owner_user_id = #{userId} AND p.id = #{productId}
+          AND pr.id = #{revisionId} AND pr.status = 'DRAFT'
+    </select>
+
+    <!-- 所有查询都带 owner 条件，不能通过客户端传 shopId 来读取别人的草稿。 -->
+    <select id="findOwnDrafts" resultType="dev.meteor.product.dto.ProductDraftResponse">
+        SELECT <include refid="draftColumns"/>
+        FROM products p
+        JOIN shops s ON s.id = p.shop_id
+        JOIN product_revisions pr ON pr.product_id = p.id
+        WHERE s.owner_user_id = #{userId} AND pr.status = 'DRAFT'
+        ORDER BY pr.created_at DESC, pr.id DESC
+        LIMIT 50
+    </select>
+</mapper>

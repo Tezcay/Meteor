@@ -18,6 +18,7 @@ public class ProductQueryService {
         this.productMapper = productMapper;
     }
 
+    // readOnly 表达只读意图；是否可公开由 Mapper 的商品／修订／店铺状态条件共同决定。
     @Transactional(readOnly = true)
     public ProductDetailResponse getPublishedProduct(long productId) {
         if (productId <= 0) {
@@ -51,6 +52,9 @@ public class ProductQueryService {
             throw new IllegalArgumentException("category must be a valid slug");
         }
 
+        // 转义
+        // #{searchPattern} 负责参数绑定；以下转义另用于让 LIKE 的 %、_ 按字面搜索。
+        // 必须先转义 !，否则后面新加的转义前缀也会被再次处理。
         String searchPattern = "%" + normalized
                 .replace("!", "!!")
                 .replace("%", "!%")

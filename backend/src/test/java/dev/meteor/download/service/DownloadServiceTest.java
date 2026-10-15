@@ -2,6 +2,8 @@ package dev.meteor.download.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import dev.meteor.download.dto.DownloadAuthorizationResponse;
 import dev.meteor.download.dto.DownloadFilePayload;
@@ -76,6 +78,25 @@ class DownloadServiceTest {
 
         assertThat(mapper.accessibleFileCalls).isZero();
         assertThat(mapper.markConsumedCalls).isZero();
+    }
+
+    @Test
+    void rejectsTicketThatExpiresWhileWaitingForRowLock() {
+        mapper.file = Optional.of(file());
+        mapper.ticketProjection = Optional.of(ticket(
+                DownloadTicketStatus.ISSUED, NOW.plusSeconds(60), null));
+        Clock lockAwareClock = mock(Clock.class);
+        // 不实际 sleep：模拟查锁前尚有效、数据库返回锁后恰好到期的时序。
+        when(lockAwareClock.instant()).thenAnswer(ignored ->
+                mapper.ticketLocked ? NOW.plusSeconds(60) : NOW);
+        DownloadService lockAwareService = new DownloadService(mapper, lockAwareClock, new SecureRandom());
+
+        assertThatThrownBy(() -> lockAwareService.consume(2L, "expires-during-lock-wait"))
+                .isInstanceOf(DownloadNotFoundException.class);
+
+        assertThat(mapper.accessibleFileCalls).isZero();
+        assertThat(mapper.markConsumedCalls).isZero();
+        assertThat(mapper.audit).isNull();
     }
 
     @Test
@@ -203,6 +224,7 @@ class DownloadServiceTest {
         private Optional<DownloadTicketProjection> ticketProjection = Optional.empty();
         private DownloadTicketInsert ticket;
         private DownloadAuditInsert audit;
+        private boolean ticketLocked;
         private int accessibleFileCalls;
         private int markConsumedCalls;
         private long consumedTicketId;
@@ -228,6 +250,7 @@ class DownloadServiceTest {
 
         @Override
         public Optional<DownloadTicketProjection> findTicketForUpdate(String tokenHash, long userId) {
+            ticketLocked = true;
             return ticketProjection;
         }
 

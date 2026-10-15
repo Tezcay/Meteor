@@ -75,11 +75,11 @@ if ($RequireContainers) {
     $integrationSuite = $integrationDocument.testsuite
     $integrationTests = [int]$integrationSuite.tests
     $integrationSkipped = [int]$integrationSuite.skipped
-    if ($integrationTests -ne 2 -or $integrationSkipped -ne 0) {
-        throw "Testcontainers gate failed: expected tests=2 and skipped=0, got tests=$integrationTests and skipped=$integrationSkipped."
+    if ($integrationTests -ne 5 -or $integrationSkipped -ne 0) {
+        throw "Testcontainers gate failed: expected tests=5 and skipped=0, got tests=$integrationTests and skipped=$integrationSkipped."
     }
 
-    Write-Host 'Testcontainers gate: tests=2 skipped=0'
+    Write-Host 'Testcontainers gate: tests=5 skipped=0'
 } elseif ($skippedCount -gt 0) {
     Write-Warning 'Some backend tests were skipped. Run with -RequireContainers before claiming Testcontainers verification.'
 }
@@ -144,11 +144,11 @@ Assert-LastExitCode -Step 'Git whitespace check'
 Assert-LastExitCode -Step 'Staged Git whitespace check'
 
 $textExtensions = @(
-    '.css', '.html', '.java', '.js', '.json', '.md', '.properties', '.ps1',
+    '.css', '.html', '.java', '.js', '.json', '.md', '.properties', '.ps1', '.py',
     '.sh', '.sql', '.ts', '.txt', '.vue', '.xml', '.yaml', '.yml'
 )
 $untrackedWhitespace = @()
-$untrackedFiles = @(& git -C $repositoryRoot ls-files --others --exclude-standard)
+$untrackedFiles = @(& git -c core.quotepath=false -C $repositoryRoot ls-files --others --exclude-standard)
 Assert-LastExitCode -Step 'Untracked file listing'
 foreach ($relativePath in $untrackedFiles) {
     $extension = [IO.Path]::GetExtension($relativePath).ToLowerInvariant()

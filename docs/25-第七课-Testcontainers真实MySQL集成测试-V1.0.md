@@ -1,5 +1,10 @@
 # 第七课：Testcontainers 真实 MySQL 集成测试 V1.0
 
+## 2026-10-15：素材商品验收
+
+当前集成类有 5 项测试，从空库执行 V1～V13，后端总计 125 项通过、0 跳过。新增一项循环验证四个图片 ZIP 的完整交易和实际文件内容。第 7.3 节的 95 项／2 项容器证据保留为历史记录。详见[素材接入说明](31-已有展示素材接入真实商品.md)。
+
+
 > 对应代码：`backend/src/test/java/dev/meteor/integration/PurchaseFlowMySqlIntegrationTest.java`。
 > 总学习时间：约 2 小时 30 分钟；每节 10～20 分钟，可以分开完成。
 > 前置课：[第四课：测试支付与事务内权益发放](22-第四课-测试支付与事务内权益发放-V1.0.md)。
@@ -629,3 +634,26 @@ Maven Wrapper 固定构建工具版本，Java 21 仍需由电脑或 CI 提供。
 - [ ] 不会把“本机 2 项真实 MySQL 测试通过”扩大成生产数据库、真实支付、压力测试或高并发容量验证。
 
 下一次从这里继续：先亲手运行一次 `scripts\verify.ps1 -RequireContainers` 并打开 Surefire 报告定位这 2 项测试；能够解释成功链和两类回滚后，再按实际代码托管平台接入 CI。
+
+
+## 9. 本机反复弹窗：2026-10-15 排查
+
+本机 Docker Desktop 4.86.0 在启动内部 Inference manager／Secrets Engine 时，Windows 拒绝访问零字节 AF_UNIX 通信文件，报1920。此时 Linux Engine 尚未启动；设置 DOCKER_HOST 只会改变连接目标，不会修复这个失败。失败位置与[官方问题 #531](https://github.com/docker/desktop-feedback/issues/531) 一致，但不据此断言底层 Windows 驱动原因已完全查明。
+
+本轮确认 Docker 进程已退出后，备份 `%APPDATA%/Docker/settings-store.json` 到同目录 `settings-store.pre-meteor-20261015.json`，仅把已有 `EnableDockerAI` 从 true 改成 false。官方设置说明表明该开关控制 Gordon 助手，不等于 Model Runner 的 EnableInference；本轮已纠正前面的混称，并在重启仍失败后恢复 EnableDockerAI 的原值 true。将 `%LOCALAPPDATA%/Docker/run` 与 `%LOCALAPPDATA%/docker-secrets-engine` 的套接字父目录改名保留，避免递归删除或触碰数据 VHDX。新的启动恢复引擎29.7.2，并完成125项测试。
+
+该处理是针对已观察到故障的本机恢复方法，不保证所有 Windows 版本永久修复；官方问题中也有关闭 AI 后其他内部套接字仍失败的报告。启动失败应先读日志并停止重复尝试，不循环拉起弹窗，不用恢复出厂设置代替诊断。更新 Docker 可作为后续路径，但升级后仍应验证正常退出和再次启动。
+
+
+### 9.1 重启复测结论与下次启动
+
+在125项测试及应用清理结束后，执行 `docker desktop stop` 正常退出，确认无 Docker 进程，再启动一次。4.86.0 仍在新生成的 `dockerInference` 上报1920，因此本轮没有根治反复启动问题。配置日志确认 EnableDockerAI=false 已被读取；不能把恢复一次启动归因于关闭 Model Runner。该开关随后恢复原值，配置备份保留。参照[官方设置说明](https://docs.docker.com/desktop/enterprise/hardened-desktop/settings-management/configure-json-file/)区分 Gordon 与 Model Runner。
+
+本机下一次可在仓库根运行以下辅助脚本；它先检查 Engine，已运行就直接返回；如果 Docker 进程仍在则停止操作。仅对两个已知运行目录中白名单零字节套接字保留父目录，不修改用户设置、镜像、容器、卷或数据盘，再启动一次，不循环重试：
+
+```powershell
+.\scripts\start-local-docker.ps1
+docker info
+```
+
+本轮实际执行 `-PrepareOnly` 路径：保留故障运行目录，未再次启动 Docker。默认启动分支仅通过 PowerShell 语法检查，尚未实际执行，不能宣传该脚本已证明永久解决问题。它是已有目录恢复步骤的封装；发生未知目录内容会拒绝操作。官方稳定版更新可作为后续修复步骤；保留数据原位升级并不保证解决所有系统上的同类问题，不能用恢复出厂设置替代验证。

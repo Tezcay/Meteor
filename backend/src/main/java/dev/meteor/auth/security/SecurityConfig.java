@@ -89,6 +89,9 @@ public class SecurityConfig {
                         .permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login")
                         .permitAll()
+                        // 创作者接口要求角色；数据归属仍由 Service/SQL 从当前用户检查。
+                        .requestMatchers("/api/creator/**")
+                        .hasRole("CREATOR")
                         .requestMatchers(
                                 HttpMethod.POST,
                                 "/api/orders",

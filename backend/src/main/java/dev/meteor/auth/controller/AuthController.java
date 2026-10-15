@@ -58,11 +58,13 @@ public class AuthController {
         Authentication authentication = authenticationManager.authenticate(
                 UsernamePasswordAuthenticationToken.unauthenticated(loginRequest.email(), loginRequest.password())
         );
+        // 认证成功后更换 Session ID 并刷新 CSRF，防止沿用登录前的会话凭证。
         sessionAuthenticationStrategy.onAuthentication(authentication, request, response);
 
         SecurityContext context = securityContextHolderStrategy.createEmptyContext();
         context.setAuthentication(authentication);
         securityContextHolderStrategy.setContext(context);
+        // 当前线程的认证上下文不会自动跨请求保存；显式写入 Session 后，下次请求才能恢复用户。
         securityContextRepository.saveContext(context, request, response);
 
         return toResponse((MeteorUserPrincipal) authentication.getPrincipal());

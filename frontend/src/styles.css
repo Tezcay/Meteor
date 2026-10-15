@@ -20,7 +20,8 @@ html {
 }
 body {
   margin: 0;
-  min-width: 320px;
+  /* 320px 视口在 Windows 上还要扣除滚动条，不能给 body 再强制 320px 宽。 */
+  min-width: 0;
 }
 button,
 input {

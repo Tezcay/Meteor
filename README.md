@@ -1,5 +1,9 @@
 # Meteor
 
+## 2026-10-15：素材商品验收
+
+9 张已有图片已组成 4 个真实 ZIP 商品，V13 沿用现有表配置分类、套餐、版本与清单；图集可进入真实购买流程。当前严格门禁 125 项全部通过、0 跳过，含 5 项真实 MySQL 测试；前端格式／类型／构建及 56 份 Markdown 链接检查通过。详见[素材接入说明](docs/31-已有展示素材接入真实商品.md)。
+
 Meteor 是一个面向数字作品交易与交付的全栈学习项目。当前重点是把“登录、下单、测试支付、权益发放、版本、文件清单和受控下载”做成能够测试、演示并在面试中解释的真实业务链路，同时控制无目的的页面扩张。
 
 ## 当前完成度
@@ -28,12 +32,16 @@ Meteor 是一个面向数字作品交易与交付的全栈学习项目。当前�
 - 五分钟一次性下载票据；只保存 token 哈希，消费前重新校验 Session 用户、ACTIVE Grant、PUBLISHED Release、ManifestItem 和 FileObject，流式核对文件大小与 SHA-256，再以 Spring `Resource` 写响应并记录响应准备审计。
 - Vue 3 桌面与手机端真实业务页面；内容库下载按钮已接真实授权和文件响应。
 - 核心页面的 SPA 焦点、键盘菜单、可见焦点、触摸目标和减少动画支持；11 个路由完成 axe WCAG A/AA 扫描。
-- Testcontainers 临时 MySQL 从空库执行 Flyway V1～V12，并实跑购买、下载、同键双线程下单幂等及两类事务回滚；严格门禁要求容器测试不得跳过。
+- Testcontainers 临时 MySQL 从空库执行 Flyway V1～V13，并实跑购买、下载、同键双线程下单幂等及两类事务回滚；严格门禁要求容器测试不得跳过。
+
+商家端已接通真实草稿与首次发布页面；旧入驻、审核和经营页面仍属于演示。
+2026-10-14 已接通最小商家发布：已有店铺创建草稿，配置一个套餐，选择自己的已有交付素材，生成正式版本和冻结清单后上架。新商品可被另一买家购买下载；没有真实上传或审核。范围见 [MVP 清单](docs/29-简历投递版MVP范围与验收.md)，源码与测试见 [发布专题](docs/28-创作者商品草稿与发布任务-V1.0.md)。
+2026-10-15 严格门禁：后端 125 项全部通过、0 跳过，含 5 项真实 MySQL；前端格式／类型／生产构建与 56 份 Markdown 链接检查通过。之前的 108／124 项为历史记录。详见执行日志。
 
 尚未完成：
 
 - 真实支付商签名、退款、对账和异常恢复任务。
-- 创作者发布与审核写接口。
+- 草稿编辑、真实上传、审核、商家入驻与多套餐／多版本管理。
 - 生产对象存储、Range／断点续传、失败下载审计、限流和对象版本校验。
 - 注册／找回密码、CI、部署与性能验证。
 
@@ -46,7 +54,7 @@ Meteor 是一个面向数字作品交易与交付的全栈学习项目。当前�
 - 前端：Vue 3、TypeScript、Vite
 - 验证：JUnit 5、AssertJ、MockMvc、Testcontainers、Playwright、axe-core、真实 MySQL HTTP 验收
 
-当前基线：Flyway V12；Maven 后端测试 95 项全部通过、0 跳过，其中 2 项 Testcontainers 使用真实 MySQL 8.0.36，并包含两个线程同时使用同一幂等键的数据库竞争场景；前端类型检查与生产构建通过。11 个核心路由及本轮下载状态 axe WCAG A/AA 为 0 条违规。订单、支付尝试和支付事件状态已经使用明确枚举。每个 HTTP 响应包含 `X-Request-Id`，错误 JSON 和请求完成日志使用同一编号。
+历史验收基线（2026-10-05）：Flyway V12；Maven 后端测试 95 项全部通过、0 跳过，其中 2 项 Testcontainers 使用真实 MySQL 8.0.36，并包含两个线程同时使用同一幂等键的数据库竞争场景；前端类型检查与生产构建通过。11 个核心路由及当轮下载状态 axe WCAG A/AA 为 0 条违规。订单、支付尝试和支付事件状态已经使用明确枚举。每个 HTTP 响应包含 `X-Request-Id`，错误 JSON 和请求完成日志使用同一编号。该历史结果不替代新增代码的验收。
 
 ## 目录
 
@@ -92,11 +100,11 @@ npm run dev
 .\scripts\verify.ps1
 ```
 
-该命令使用 Maven Wrapper 执行后端测试，再执行前端 Prettier 检查、TypeScript／生产构建、Markdown 相对链接检查和 `git diff --check`。普通模式会明确报告被跳过的测试；发布证据使用 `./scripts/verify.ps1 -RequireContainers`，要求两项 Testcontainers 测试均实际执行。2026-10-04 本机严格门禁已完整通过。
+该命令使用 Maven Wrapper 执行后端测试，再执行前端 Prettier 检查、TypeScript／生产构建、Markdown 相对链接检查和 `git diff --check`。普通模式会明确报告被跳过的测试；发布证据使用 `./scripts/verify.ps1 -RequireContainers`，要求五项 Testcontainers 测试均实际执行。2026-10-15 主目录严格门禁已完整通过。
 
 后端测试覆盖认证、订单核价与幂等、支付事件、权益、订单查询、Release、Manifest 和一次性下载权限。真实 MySQL 与浏览器验收结果记录在 [学习执行日志](docs/08-学习执行日志.md)。
 
-`PurchaseFlowMySqlIntegrationTest` 已实际启动临时 MySQL，执行 Flyway V1～V12，并验证真实下单支付、顺序重放、同键双线程竞争、一次性下载、重复 token，以及 Grant／DownloadAudit 写入失败时的事务回滚和重试。本机报告为 `Tests run: 2, Failures: 0, Errors: 0, Skipped: 0`；双线程场景连续运行 3 轮均通过。它不是压力测试或性能证明，运行方法与证据边界见[第七课](docs/25-第七课-Testcontainers真实MySQL集成测试-V1.0.md)。
+`PurchaseFlowMySqlIntegrationTest` 当前 5 项全部通过、0 跳过，执行 Flyway V1～V13，并验证真实下单支付、顺序重放、同键双线程竞争、首次发布竞争／回滚、四个图片 ZIP 的实际内容、一次性下载，以及 Grant／DownloadAudit 写入失败时的事务回滚和重试。它不是压力测试或性能证明，运行方法与证据边界见[第七课](docs/25-第七课-Testcontainers真实MySQL集成测试-V1.0.md)。
 
 开发环境可在任一路由追加 `?a11y=1` 运行 axe，例如 `http://localhost:5173/products/1001?a11y=1`。详细复测方法、人工检查和未覆盖边界见 [无障碍审查报告](docs/18-无障碍审查与修复报告-2026-10-03.md)。
 

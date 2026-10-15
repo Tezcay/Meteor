@@ -10,6 +10,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/** 先验证当前用户的有效权益，再用权益中的可信 packageId 限定正式版本。 */
 @Service
 public class ReleaseService {
 
@@ -26,6 +27,7 @@ public class ReleaseService {
         EntitlementGrantProjection grant = entitlementMapper
                 .findActiveByIdAndUserId(grantId, userId)
                 .orElseThrow(() -> new EntitlementGrantNotFoundException(grantId));
+        // 不接收客户端 packageId，防止拿 Basic 权益读取另一个套餐的版本。
         List<ReleaseProjection> releases = releaseMapper.findPublishedByPackageId(grant.packageId());
         List<ReleaseResponse> result = new ArrayList<>(releases.size());
         for (int index = 0; index < releases.size(); index++) {

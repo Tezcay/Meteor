@@ -8,6 +8,7 @@ import org.apache.ibatis.annotations.Param;
 
 public interface ProductMapper {
 
+    // 返回 0 或 1
     Optional<ProductSummaryProjection> findPublishedProduct(@Param("productId") long productId);
 
     List<ProductSummaryProjection> findPublishedProducts(

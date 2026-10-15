@@ -11,6 +11,7 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+/** 沿用户权益校验套餐与正式版本的归属，返回冻结清单的文件元数据，不暴露存储位置。 */
 @Service
 public class DeliveryManifestService {
 
@@ -30,6 +31,7 @@ public class DeliveryManifestService {
         EntitlementGrantProjection grant = entitlementMapper
                 .findActiveByIdAndUserId(grantId, userId)
                 .orElseThrow(() -> new EntitlementGrantNotFoundException(grantId));
+        // releaseId 是不可信输入，查询必须同时限定权益允许的 packageId。
         DeliveryManifestProjection manifest = manifestMapper
                 .findPublishedByReleaseIdAndPackageId(releaseId, grant.packageId())
                 .orElseThrow(() -> new DeliveryManifestNotFoundException(releaseId));

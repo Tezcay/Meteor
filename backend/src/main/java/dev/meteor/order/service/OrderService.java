@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 
+/** 下单只信任服务端商品和套餐；同次购买重试返回成交快照，订单头与订单项一起提交。 */
 @Service
 public class OrderService {
 
@@ -33,6 +34,7 @@ public class OrderService {
 
     @Transactional
     public OrderResponse createOrder(long userId, CreateOrderRequest request) {
+        // 幂等键限定在当前用户内。先重放历史快照，避免重试时按新价格重新成交。
         OrderSnapshotProjection existing = orderMapper
                 .findByUserIdAndIdempotencyKey(userId, request.idempotencyKey())
                 .orElse(null);
@@ -43,6 +45,7 @@ public class OrderService {
             return toResponse(existing);
         }
 
+        // 客户端只给商品和套餐 ID；可售状态、价格与币种都从数据库重新读取。
         ProductSummaryProjection product = productMapper.findPublishedProduct(request.productId())
                 .orElseThrow(() -> new ProductNotFoundException(request.productId()));
         PackageOptionProjection packageOption = productMapper
@@ -59,6 +62,8 @@ public class OrderService {
         try {
             orderMapper.insertOrder(order);
         } catch (DuplicateKeyException duplicateKeyException) {
+            // 两个请求可能同时查不到旧订单，最终由唯一约束裁决。
+            // 用 FOR UPDATE 当前读取得胜出事务的订单，避免重复读快照仍看不到它。
             OrderSnapshotProjection concurrentlyCreated = orderMapper
                     .findByUserIdAndIdempotencyKeyForUpdate(userId, request.idempotencyKey())
                     .orElseThrow(() -> duplicateKeyException);
@@ -68,6 +73,7 @@ public class OrderService {
             }
             return toResponse(concurrentlyCreated);
         }
+        // 保存当时的标题、套餐和价格；以后商品变更不能改写这笔订单的购买事实。
         orderMapper.insertOrderItem(new OrderItemInsert(
                 order.getId(),
                 product.id(),
@@ -105,6 +111,7 @@ public class OrderService {
 
     @Transactional(readOnly = true)
     public OrderDetailResponse getOrder(long userId, long orderId) {
+        // 订单 ID 不是访问凭证。把当前用户放入查询，不存在和越权都走相同的 404。
         return orderMapper.findDetailByIdAndUserId(orderId, userId)
                 .map(OrderService::toDetailResponse)
                 .orElseThrow(() -> new OrderNotFoundException(orderId));

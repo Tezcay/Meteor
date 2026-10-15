@@ -3,6 +3,7 @@ import AdminPages from './pages/AdminPages.vue'
 import AccountPages from './pages/AccountPages.vue'
 import BuyerPages from './pages/BuyerPages.vue'
 import CreatorPages from './pages/CreatorPages.vue'
+import CreatorProductsPage from './pages/CreatorProductsPage.vue'
 import HomePage from './pages/HomePage.vue'
 import { getCurrentUser, roleFromCurrentUser } from './api/auth'
 import { getLocalRole } from './data/localStore'
@@ -29,6 +30,8 @@ const router = createRouter({
       component: AdminPages,
       props: (route) => ({ path: route.path }),
     },
+    { path: '/creator/works', component: CreatorProductsPage },
+    { path: '/creator/releases/new', component: CreatorProductsPage },
     {
       path: '/creator/:pathMatch(.*)*',
       component: CreatorPages,

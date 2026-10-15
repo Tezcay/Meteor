@@ -20,6 +20,8 @@ export interface ShowcaseItem {
 
 export interface ArtworkCollection {
   slug: string
+  /** Reserved demo product ID seeded by V13; transaction data still comes from the API. */
+  productId: number
   title: string
   maker: string
   category: 'photography' | 'illustration'
@@ -184,11 +186,11 @@ const posterItems: ShowcaseItem[] = posterImages.map(([title, image, description
   subcategory: posterTopics[title] ?? 'landscape',
   tags: ['风景', '纸本质感', ...(posterTags[title] ?? [])],
   topic: posterTopics[title],
-  // Only the declared winter trio is an editorial sequence; visual similarity is not enough.
-  collectionSlug: winterPosterTitles.has(title) ? 'winter-stillness' : undefined,
+  // Each preview belongs to an explicitly configured collection and V13 demo product.
+  collectionSlug: posterTopics[title],
 }))
 
-// Editorial demonstrations are browsing material, not purchasable product records.
+// Preview configuration is separate from transaction records seeded by V13.
 export const showcaseItems: ShowcaseItem[] = [...demoItems, ...photographyItems, ...posterItems]
 
 export interface ArtworkTopic {
@@ -229,6 +231,7 @@ export const illustrationTopics: ArtworkTopic[] = [
 export const artworkCollections: ArtworkCollection[] = [
   {
     slug: 'light-and-space',
+    productId: 9101,
     title: '光与空间',
     maker: '摄影演示',
     category: 'photography',
@@ -241,6 +244,7 @@ export const artworkCollections: ArtworkCollection[] = [
   },
   {
     slug: 'winter-stillness',
+    productId: 9102,
     title: '冬日静谧',
     maker: '编辑精选',
     category: 'illustration',
@@ -251,6 +255,7 @@ export const artworkCollections: ArtworkCollection[] = [
   },
   {
     slug: 'quiet-architecture',
+    productId: 9103,
     title: '静谧建筑',
     maker: '编辑精选',
     category: 'illustration',
@@ -261,6 +266,7 @@ export const artworkCollections: ArtworkCollection[] = [
   },
   {
     slug: 'landscape-narrative',
+    productId: 9104,
     title: '风景叙事',
     maker: '编辑精选',
     category: 'illustration',

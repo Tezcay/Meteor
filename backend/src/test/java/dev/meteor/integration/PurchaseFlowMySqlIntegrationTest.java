@@ -15,6 +15,9 @@ import dev.meteor.order.service.OrderService;
 import dev.meteor.payment.dto.PaymentResponse;
 import dev.meteor.payment.dto.TestPaymentEventRequest;
 import dev.meteor.payment.service.PaymentService;
+import dev.meteor.product.dto.CreateProductDraftRequest;
+import dev.meteor.product.dto.ProductDraftResponse;
+import dev.meteor.product.service.ProductDraftService;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -61,12 +64,48 @@ class PurchaseFlowMySqlIntegrationTest {
     @Autowired
     private DownloadService downloadService;
 
+    @Autowired
+    private ProductDraftService productDraftService;
+
+    // 隔离的临时 MySQL 中验证真实自增主键、记录归属及第二张表失败后的事务回滚。
+    private void assertCreatorDraftStorageAndRollback(long creatorId, long buyerId) {
+        ProductDraftResponse draft = productDraftService.createDraft(
+                creatorId, new CreateProductDraftRequest(" 容器测试草稿 ", " 尚未发布 "));
+        assertThat(draft.productId()).isPositive();
+        assertThat(draft.revisionId()).isPositive();
+        assertThat(draft.title()).isEqualTo("容器测试草稿");
+        assertThat(draft.revisionStatus()).isEqualTo("DRAFT");
+        assertThat(draft.saleStatus()).isEqualTo("OFF_SALE");
+        assertThat(productDraftService.listOwnDrafts(creatorId)).contains(draft);
+        assertThat(productDraftService.listOwnDrafts(buyerId)).isEmpty();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT current_published_revision_id FROM products WHERE id = ?", Long.class, draft.productId()))
+                .isNull();
+
+        int before = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM products", Integer.class);
+        jdbcTemplate.execute("""
+                CREATE TRIGGER it_fail_draft_revision BEFORE INSERT ON product_revisions
+                FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'draft rollback test'
+                """);
+        try {
+            assertThatThrownBy(() -> productDraftService.createDraft(
+                    creatorId, new CreateProductDraftRequest("失败草稿", "用于验证回滚")))
+                    .isInstanceOf(DataAccessException.class);
+            assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM products", Integer.class))
+                    .isEqualTo(before);
+        } finally {
+            jdbcTemplate.execute("DROP TRIGGER IF EXISTS it_fail_draft_revision");
+        }
+    }
+
     @Test
     void runsAllMigrationsAndCompletesIdempotentPurchaseAndDownload() throws Exception {
         long buyerId = userId("buyer@meteor.local");
         long creatorId = userId("creator@meteor.local");
 
-        assertThat(appliedMigrationCount()).isEqualTo(12);
+        assertThat(appliedMigrationCount()).isEqualTo(13);
+
+        assertCreatorDraftStorageAndRollback(creatorId, buyerId);
 
         OrderResponse order = orderService.createOrder(
                 buyerId,
@@ -221,6 +260,152 @@ class PurchaseFlowMySqlIntegrationTest {
         assertThat(retriedFile.sizeBytes()).isEqualTo(634L);
         assertThat(ticketStatus(authorization.ticketId())).isEqualTo("CONSUMED");
         assertThat(count("download_audits", "download_ticket_id", authorization.ticketId())).isEqualTo(1);
+    }
+
+
+    @Autowired
+    private dev.meteor.product.service.ProductPublicationService publicationService;
+
+    @Autowired
+    private dev.meteor.product.service.ProductQueryService productQueryService;
+
+    @Test
+    void publishesOwnDraftAndCompletesPurchaseOfTheNewProduct() throws Exception {
+        long creatorId = userId("creator@meteor.local");
+        long buyerId = userId("buyer@meteor.local");
+        ProductDraftResponse draft = productDraftService.createDraft(
+                creatorId, new CreateProductDraftRequest("真实新商品", "通过发布接口生成的交付"));
+        assertThatThrownBy(() -> productQueryService.getPublishedProduct(draft.productId()))
+                .isInstanceOf(dev.meteor.product.service.ProductNotFoundException.class);
+        assertThatThrownBy(() -> publicationService.publish(buyerId, draft.productId(),
+                new dev.meteor.product.dto.PublishProductRequest("Basic", 2300, 5001)))
+                .isInstanceOf(dev.meteor.product.service.ProductDraftNotFoundException.class);
+        assertThat(publicationService.listReusableAssets(buyerId)).isEmpty();
+
+        // 两个调用同时发布同一草稿，最终必须共享一个套餐、版本和清单，而非重复交付对象。
+        var request = new dev.meteor.product.dto.PublishProductRequest("Basic", 2300, 5001);
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        dev.meteor.product.dto.ProductPublicationResponse published;
+        try {
+            java.util.concurrent.Callable<dev.meteor.product.dto.ProductPublicationResponse> task = () -> {
+                ready.countDown();
+                if (!start.await(5, TimeUnit.SECONDS)) { throw new IllegalStateException("Publication start timed out"); }
+                return publicationService.publish(creatorId, draft.productId(), request);
+            };
+            var first = executor.submit(task);
+            var second = executor.submit(task);
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
+            start.countDown();
+            published = first.get(15, TimeUnit.SECONDS);
+            assertThat(second.get(15, TimeUnit.SECONDS)).isEqualTo(published);
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+            executor.awaitTermination(5, TimeUnit.SECONDS);
+        }
+        assertThat(count("packages", "product_id", draft.productId())).isEqualTo(1);
+        assertThat(count("releases", "package_id", published.packageId())).isEqualTo(1);
+        assertThat(count("delivery_manifests", "release_id", published.releaseId())).isEqualTo(1);
+        assertThat(count("manifest_items", "manifest_id", published.manifestId())).isEqualTo(1);
+        assertThat(productQueryService.getPublishedProduct(draft.productId()).title()).isEqualTo("真实新商品");
+        assertThatThrownBy(() -> publicationService.publish(creatorId, draft.productId(),
+                new dev.meteor.product.dto.PublishProductRequest("Basic", 2400, 5001)))
+                .isInstanceOf(dev.meteor.product.service.ProductPublicationConflictException.class);
+
+        OrderResponse order = orderService.createOrder(buyerId,
+                new CreateOrderRequest(draft.productId(), published.packageId(), "it-published-product"));
+        assertThat(order.totalAmountCents()).isEqualTo(2300);
+        PaymentResponse payment = paymentService.applyTestPayment(buyerId, order.id(),
+                new TestPaymentEventRequest("it-published-event", "it-published-transaction", 2300, "CNY"));
+        DownloadAuthorizationResponse authorization = downloadService.authorize(
+                buyerId, payment.entitlementGrantId(), published.releaseId(), published.manifestItemId());
+        assertThat(downloadService.consume(buyerId, tokenFrom(authorization)).sizeBytes()).isEqualTo(634);
+        assertThatThrownBy(() -> downloadService.consume(buyerId, tokenFrom(authorization)))
+                .isInstanceOf(DownloadNotFoundException.class);
+    }
+
+    @Test
+    void rollsBackPublicationWhenManifestItemInsertionFails() {
+        long creatorId = userId("creator@meteor.local");
+        ProductDraftResponse draft = productDraftService.createDraft(
+                creatorId, new CreateProductDraftRequest("发布回滚草稿", "交付失败时不能上架"));
+        var request = new dev.meteor.product.dto.PublishProductRequest("Basic", 1700, 5001);
+        jdbcTemplate.execute("""
+                CREATE TRIGGER it_reject_publication_item BEFORE INSERT ON manifest_items
+                FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'publication rollback test'
+                """);
+        try {
+            assertThatThrownBy(() -> publicationService.publish(creatorId, draft.productId(), request))
+                    .isInstanceOf(DataAccessException.class);
+            assertThat(count("packages", "product_id", draft.productId())).isZero();
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT status FROM product_revisions WHERE id = ?", String.class, draft.revisionId()))
+                    .isEqualTo("DRAFT");
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT sale_status FROM products WHERE id = ?", String.class, draft.productId()))
+                    .isEqualTo("OFF_SALE");
+            assertThat(jdbcTemplate.queryForObject(
+                    "SELECT current_published_revision_id FROM products WHERE id = ?", Long.class, draft.productId()))
+                    .isNull();
+            assertThatThrownBy(() -> productQueryService.getPublishedProduct(draft.productId()))
+                    .isInstanceOf(dev.meteor.product.service.ProductNotFoundException.class);
+        } finally {
+            jdbcTemplate.execute("DROP TRIGGER IF EXISTS it_reject_publication_item");
+        }
+        assertThat(publicationService.publish(creatorId, draft.productId(), request).productId())
+                .isEqualTo(draft.productId());
+    }
+
+    @Test
+    void purchasesAllImportedShowcasePacksAndVerifiesTheirRealImages() throws Exception {
+        long buyerId = userId("buyer@meteor.local");
+        long creatorId = userId("creator@meteor.local");
+        String[][] imageNames = {
+                {"courtyard-1280.webp", "exhibition-1942.webp", "creator-studio-1280.webp"},
+                {"winter-forest.webp", "tahoe-overlook.webp", "winter-cabin.webp"},
+                {"still-places.webp"}, {"sunset-field.webp", "wild-places.webp"}
+        };
+        for (int index = 0; index < imageNames.length; index++) {
+            long id = 9101L + index;
+            String category = index == 0 ? "photography" : "illustration";
+            var product = productQueryService.getPublishedProduct(id);
+            assertThat(productQueryService.listPublishedProducts("", category))
+                    .anyMatch(item -> item.id() == id);
+            assertThat(publicationService.listReusableAssets(creatorId)).anyMatch(item -> item.id() == id);
+            assertThat(publicationService.listReusableAssets(buyerId)).isEmpty();
+            long amount = product.packages().getFirst().priceCents();
+            var order = orderService.createOrder(buyerId,
+                    new CreateOrderRequest(id, id, "it-showcase-" + id));
+            assertThat(order.totalAmountCents()).isEqualTo(amount);
+            var payment = paymentService.applyTestPayment(buyerId, order.id(),
+                    new TestPaymentEventRequest("it-showcase-event-" + id, "it-showcase-tx-" + id, amount, "CNY"));
+            assertThatThrownBy(() -> downloadService.authorize(creatorId, payment.entitlementGrantId(), id, id))
+                    .isInstanceOf(DownloadNotFoundException.class);
+            var authorization = downloadService.authorize(buyerId, payment.entitlementGrantId(), id, id);
+            var payload = downloadService.consume(buyerId, tokenFrom(authorization));
+            assertThat(payload.mediaType()).isEqualTo("application/zip");
+            // Verify receipt bytes, not just a PREPARED audit or a download button.
+            byte[] receipt;
+            try (var input = payload.resource().getInputStream()) { receipt = input.readAllBytes(); }
+            assertThat(receipt.length).isEqualTo(payload.sizeBytes());
+            assertThat(java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(receipt)))
+                    .isEqualTo(payload.sha256());
+            java.util.Map<String, byte[]> entries = new java.util.HashMap<>();
+            try (var zip = new java.util.zip.ZipInputStream(new java.io.ByteArrayInputStream(receipt))) {
+                java.util.zip.ZipEntry entry;
+                while ((entry = zip.getNextEntry()) != null) { entries.put(entry.getName(), zip.readAllBytes()); }
+            }
+            assertThat(entries.keySet()).containsExactlyInAnyOrderElementsOf(
+                    java.util.stream.Stream.concat(java.util.stream.Stream.of("README.txt"), java.util.Arrays.stream(imageNames[index])).toList());
+            for (String image : imageNames[index]) {
+                assertThat(new String(entries.get(image), 0, 4, java.nio.charset.StandardCharsets.US_ASCII)).isEqualTo("RIFF");
+                assertThat(new String(entries.get(image), 8, 4, java.nio.charset.StandardCharsets.US_ASCII)).isEqualTo("WEBP");
+            }
+            assertThatThrownBy(() -> downloadService.consume(buyerId, tokenFrom(authorization)))
+                    .isInstanceOf(DownloadNotFoundException.class);
+        }
     }
 
     private void assertConcurrentOrderCreationConverges(long buyerId) throws Exception {
